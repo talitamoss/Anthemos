@@ -45,6 +45,7 @@ fun SettingsNavigation(
     composable(SettingsRoute.Main.route) {
 	SettingsScreen(
             navController = navController,
+            onNavigateBack = onNavigateBack,
             onNavigateToAesthetic = { navController.navigate(SettingsRoute.Aesthetic.route) },
             onNavigateToPrivacy = { navController.navigate(SettingsRoute.Privacy.route) },
             onNavigateToSecurity = { navController.navigate(SettingsRoute.Security.route) },

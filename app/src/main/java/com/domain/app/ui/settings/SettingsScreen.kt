@@ -25,6 +25,7 @@ fun SettingsScreen(
     navController: NavController,
     paddingValues: PaddingValues = PaddingValues(),
     viewModel: SettingsViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToDataManagement: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
@@ -36,12 +37,31 @@ fun SettingsScreen(
     onNavigateToPluginSecurity: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF3C3F41)
+                )
+            )
+        },
+        containerColor = Color(0xFF3C3F41)
+    ) { scaffoldPadding ->
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF3C3F41))
-            .padding(paddingValues),
+            .padding(scaffoldPadding),
         contentPadding = PaddingValues(vertical = 8.dp)
     ) {
         // ============================================
@@ -344,6 +364,7 @@ fun SettingsScreen(
         item {
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
     }
 }
 
