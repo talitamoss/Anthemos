@@ -12,7 +12,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "org.anthemos.app"
+        applicationId = "com.anthemos.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
