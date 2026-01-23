@@ -11,11 +11,12 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.domain.app.ui.components.navigation.AnthemosBottomBar
 import com.domain.app.ui.dashboard.DashboardScreen
+import com.domain.app.ui.direct.DirectScreen
 import com.domain.app.ui.reflect.ReflectScreen
 import com.domain.app.ui.settings.navigation.SettingsNavigation
 import com.domain.app.ui.theme.AppTheme
-import com.domain.app.ui.theme.AppIcons
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -34,11 +35,12 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen() {
-    // Pager state for swipe navigation (2 screens: Collect and Reflect)
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    // Pager state for swipe navigation (3 screens: Collect, Direct, Reflect)
+    // Start on Direct (page 1) as home screen
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
     var showSettings by remember { mutableStateOf(false) }
-    
+
     if (showSettings) {
         // Settings navigation remains the same
         SettingsNavigation(
@@ -49,45 +51,14 @@ fun MainScreen() {
     } else {
         Scaffold(
             bottomBar = {
-                // Replace NavigationBar with TabRow for swipe sync
-                TabRow(
-                    selectedTabIndex = pagerState.currentPage,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // Collect tab
-                    Tab(
-                        selected = pagerState.currentPage == 0,
-                        onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(0)
-                            }
-                        },
-                        text = { Text("Collect") },
-                        icon = {
-                            Icon(
-                                imageVector = AppIcons.Navigation.home,
-                                contentDescription = "Collect"
-                            )
+                AnthemosBottomBar(
+                    currentPage = pagerState.currentPage,
+                    onPageSelected = { page ->
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(page)
                         }
-                    )
-                    
-                    // Reflect tab
-                    Tab(
-                        selected = pagerState.currentPage == 1,
-                        onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(1)
-                            }
-                        },
-                        text = { Text("Reflect") },
-                        icon = {
-                            Icon(
-                                imageVector = AppIcons.Data.chart,
-                                contentDescription = "Reflect"
-                            )
-                        }
-                    )
-                }
+                    }
+                )
             }
         ) { paddingValues ->
             // HorizontalPager for swipe navigation
@@ -106,7 +77,12 @@ fun MainScreen() {
                             showSettings = true
                         }
                     )
-                    1 -> ReflectScreen(
+                    1 -> DirectScreen(
+                        onNavigateToSettings = {
+                            showSettings = true
+                        }
+                    )
+                    2 -> ReflectScreen(
                         onNavigateToSettings = {
                             showSettings = true
                         }
