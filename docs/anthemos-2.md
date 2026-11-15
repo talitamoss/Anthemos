@@ -39,6 +39,20 @@ Every entry keeps your exact words next to what Anthemos understood. A better mo
 
 The test phone is a Pixel 8 or newer, so on-phone AI is the default and the server is only a fallback.
 
+## Where it stands
+
+**alpha 1** covers steps 1–3, without a model yet:
+
+- **Speak** is the home page: the middle button in the bar. Tap the big button and talk. It shows what it heard and says what it did.
+- **Speech to text** uses Android's on-device recogniser where the phone has one, as the Pixel 8 does; otherwise the system recogniser, preferring offline (`voice/Listener.kt`).
+- **Understanding** is the rule-based fast path in `voice/RuleParser.kt`. It covers food ("I just had lunch, chicken and a salad"), water, coffee and tea, alcohol, movement ("went for a walk for 40 minutes"), notes ("note that ..."), calls ("call Sam") and "undo". Anything else is kept as a Journal entry with your words. Tests are in `RuleParserTest`.
+- **Records** are saved to the existing encrypted store with `source = "voice"` and the transcript in `metadata`, using the same value keys as manual entries. Today's entries show under the button, with **Undo last**.
+- **Calls** look up the contact, ask "Call Sam?" out loud, then listen for yes or no (buttons too), and only then dial.
+- **Opened to listen:** a headset or Bluetooth long press (`VOICE_COMMAND`), the assist gesture if Anthemos is chosen for it, or the `com.anthemos.LISTEN` intent all open Speak listening.
+- **Installed beside 1.x** as `com.anthemos.app.two` ("Anthemos 2"), so 1.x data is untouched. CI publishes each build as `anthemos.org/builds/anthemos2-latest.apk`.
+
+**Not yet:** signatures on entries, the on-device language model, spoken questions, the full default-assistant role (`VoiceInteractionService`), a wake word, pod sync.
+
 ## Outside things we need
 
 - [ ] **Phones.** A Pixel 8 or newer (have one), plus a second Android phone for testing if possible.

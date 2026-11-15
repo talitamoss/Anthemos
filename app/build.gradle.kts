@@ -12,11 +12,12 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.anthemos.app"
+        // Anthemos 2.0 installs beside 1.x, so it never touches 1.x data.
+        applicationId = "com.anthemos.app.two"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0.0-alpha1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,0 +1,224 @@
+// app/src/main/java/com/domain/app/ui/voice/VoiceScreen.kt
+package com.domain.app.ui.voice
+
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.domain.app.core.data.DataPoint
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+private val PERMISSIONS = arrayOf(
+    Manifest.permission.RECORD_AUDIO,
+    Manifest.permission.READ_CONTACTS,
+    Manifest.permission.CALL_PHONE
+)
+
+/**
+ * Speak: the home of Anthemos 2.0. One button to talk, what was heard and
+ * said back, and today's entries with undo.
+ *
+ * Each new [listenRequest] (above 0) starts listening straight away, for
+ * when Anthemos is opened by a headset or assistant button.
+ */
+@Composable
+fun VoiceScreen(
+    listenRequest: Int = 0,
+    onNavigateToSettings: () -> Unit = {},
+    viewModel: VoiceViewModel = hiltViewModel()
+) {
+    val context = LocalContext.current
+    val state by viewModel.state.collectAsState()
+    val today by viewModel.today.collectAsState()
+
+    val micGranted = {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+    val permissions = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result[Manifest.permission.RECORD_AUDIO] == true) viewModel.listen()
+    }
+    val talk = {
+        if (micGranted()) viewModel.listen() else permissions.launch(PERMISSIONS)
+    }
+
+    LaunchedEffect(listenRequest) {
+        if (listenRequest > 0) talk()
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Anthemos", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = onNavigateToSettings) {
+                Icon(Icons.Filled.Settings, contentDescription = "Settings")
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = state.heard.ifEmpty {
+                if (state.phase == VoicePhase.LISTENING) "Listening…" else "Tap and say what happened, or who to call"
+            },
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (state.reply.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                state.reply,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        val listening = state.phase == VoicePhase.LISTENING
+        FilledIconButton(
+            onClick = { if (listening) viewModel.stopListening() else talk() },
+            modifier = Modifier.size(120.dp).semantics {
+                contentDescription = if (listening) "Stop listening" else "Talk"
+            },
+            shape = CircleShape,
+            colors = if (listening) {
+                IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
+            } else {
+                IconButtonDefaults.filledIconButtonColors()
+            }
+        ) {
+            Icon(
+                if (listening) Icons.Filled.Stop else Icons.Filled.Mic,
+                contentDescription = null,
+                modifier = Modifier.size(56.dp)
+            )
+        }
+
+        if (state.pendingCall != null) {
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { viewModel.confirm(true) }) { Text("Yes, call") }
+                OutlinedButton(onClick = { viewModel.confirm(false) }) { Text("No") }
+            }
+        }
+
+        if (!state.onDeviceSpeech) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Speech is recognised by the phone's speech service, which may use the network.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Today", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            if (today.any { it.source == "voice" }) {
+                TextButton(onClick = { viewModel.undo() }) { Text("Undo last") }
+            }
+        }
+        HorizontalDivider()
+
+        if (today.isEmpty()) {
+            Text(
+                "Nothing yet today.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+        LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+            items(today, key = { it.id }) { point -> EntryRow(point) }
+        }
+    }
+}
+
+private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+
+@Composable
+private fun EntryRow(point: DataPoint) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+        Text(
+            TIME.format(point.timestamp.atZone(ZoneId.systemDefault())),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 12.dp)
+        )
+        Column(Modifier.weight(1f)) {
+            Text(summary(point), style = MaterialTheme.typography.bodyLarge)
+            point.metadata?.get("transcript")?.let { said ->
+                if (said != summary(point)) {
+                    Text(
+                        "“$said”",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** One line for an entry of any kind. */
+internal fun summary(point: DataPoint): String {
+    val v = point.value
+    fun s(key: String) = v[key]?.toString()?.takeIf { it.isNotBlank() }
+    return when (point.pluginId) {
+        "food" -> listOfNotNull(s("mealType"), s("notes") ?: s("foodCategory")).joinToString(": ")
+        "water" -> "Water, ${(v["amount"] as? Number)?.toInt() ?: s("amount")} ${s("unit") ?: "ml"}"
+        "caffeine", "alcohol" -> s("type") ?: point.pluginId.replaceFirstChar { it.uppercase() }
+        "movement" -> listOfNotNull(s("type"), (v["duration"] as? Number)?.let { "${it.toInt()} min" }).joinToString(", ")
+        "journal" -> s("entry") ?: "Journal"
+        else -> point.pluginId.replaceFirstChar { it.uppercase() }
+    }
+}

@@ -3,6 +3,8 @@ package com.domain.app.ui.components.navigation
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -42,7 +44,7 @@ fun AnthemosBottomBar(
                 modifier = Modifier.weight(1f)
             )
 
-            // Direct FAB (center)
+            // Speak FAB (center): the voice home of Anthemos 2.0
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.Center
@@ -65,8 +67,8 @@ fun AnthemosBottomBar(
                     )
                 ) {
                     Icon(
-                        imageVector = AppIcons.Communication.chat,
-                        contentDescription = "Direct"
+                        imageVector = Icons.Filled.Mic,
+                        contentDescription = "Speak"
                     )
                 }
             }
