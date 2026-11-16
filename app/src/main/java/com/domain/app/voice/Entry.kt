@@ -20,14 +20,21 @@ data class Entry(
     val words: String,
     val items: List<Item>,
     /** Which reader produced [items], so old readings can be redone. */
-    val reader: String
+    val reader: String,
+    /** The prompt this answered ("How did you sleep?"), if any. */
+    val prompt: String? = null
 ) {
     fun toDataPoint(): DataPoint = DataPoint(
         id = id,
         pluginId = PLUGIN_ID,
         timestamp = time,
         type = "said",
-        value = mapOf("words" to words, "items" to items.map { it.toMap() }, "reader" to reader),
+        value = buildMap {
+            put("words", words)
+            put("items", items.map { it.toMap() })
+            put("reader", reader)
+            prompt?.let { put("prompt", it) }
+        },
         metadata = mapOf("inputType" to "voice"),
         source = "voice"
     )
@@ -44,7 +51,8 @@ data class Entry(
                 time = point.timestamp,
                 words = point.value["words"]?.toString().orEmpty(),
                 items = items,
-                reader = point.value["reader"]?.toString().orEmpty()
+                reader = point.value["reader"]?.toString().orEmpty(),
+                prompt = point.value["prompt"]?.toString()
             )
         }
     }
@@ -65,7 +73,9 @@ data class Item(
     val minutes: Int? = null,
     val ml: Int? = null,
     /** For a call: the name as it was said ("dad"). */
-    val said: String? = null
+    val said: String? = null,
+    /** Money spent, in dollars. */
+    val amount: Double? = null
 ) {
     fun toMap(): Map<String, Any> = buildMap {
         put("kind", kind)
@@ -76,6 +86,7 @@ data class Item(
         minutes?.let { put("minutes", it) }
         ml?.let { put("ml", it) }
         said?.let { put("said", it) }
+        amount?.let { put("amount", it) }
     }
 
     companion object {
@@ -90,7 +101,8 @@ data class Item(
                 meal = map["meal"]?.toString(),
                 minutes = int("minutes"),
                 ml = int("ml"),
-                said = map["said"]?.toString()
+                said = map["said"]?.toString(),
+                amount = (map["amount"] as? Number)?.toDouble()
             )
         }
     }

@@ -3,6 +3,7 @@ package com.domain.app.ui.voice
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
@@ -57,11 +58,13 @@ import com.domain.app.update.UpdateBanner
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val PERMISSIONS = arrayOf(
+private val PERMISSIONS = listOfNotNull(
     Manifest.permission.RECORD_AUDIO,
     Manifest.permission.READ_CONTACTS,
-    Manifest.permission.CALL_PHONE
-)
+    Manifest.permission.CALL_PHONE,
+    // Prompts about the day arrive as notifications.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.POST_NOTIFICATIONS else null
+).toTypedArray()
 
 /**
  * Speak: the home of Anthemos 2.0. One button to talk, what was heard and

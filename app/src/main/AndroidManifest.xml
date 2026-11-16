@@ -17,6 +17,8 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <!-- Anthemos 2.0: installs its own updates from anthemos.org (update/Updater.kt) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Anthemos 2.0: prompts about the day (prompts/Prompter.kt) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Package visibility (Android 11+) for text-to-speech -->
     <queries>
@@ -58,6 +60,7 @@
         </activity>
 
         <receiver android:name=".update.UpdateReceiver" android:exported="false" />
+        <receiver android:name=".prompts.PromptActionReceiver" android:exported="false" />
 
 	<!-- Disable default WorkManager initialization since we're using on-demand initialization -->
 <provider

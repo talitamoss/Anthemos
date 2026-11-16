@@ -53,12 +53,15 @@ object Questions {
             val (rest, period) = splitPeriod(m.groupValues[2], now)
             val amount = m.groupValues[1] == "much"
             val times = Regex("^times (?:have|did|do|has) (?:i|we) (.+)$").matchEntire(rest)
-            val subject = if (times != null) {
+            val spending = Regex("\\b(spend|spent|spending|money)\\b").containsMatchIn(rest)
+            val subject = if (spending) {
+                Subject(false, "spend")
+            } else if (times != null) {
                 subject(times.groupValues[1])
             } else {
                 Subject(false, rest.replace(Regex("\\s+(have|did|do|has|had|was)\\b.*$"), "").trim())
             }
-            return Question.Count(subject, period ?: today(now), amount = amount)
+            return Question.Count(subject, period ?: today(now), amount = amount || spending)
         }
 
         DID.matchEntire(text)?.let { m ->
@@ -102,6 +105,11 @@ object Questions {
                 question.yesNo -> {
                     val last = found.maxBy { it.first.time }.first.time
                     "Yes, ${whenSaid(last, now)}" + (if (count > 1) ", $count in all." else ".")
+                }
+                question.amount && single == "spend" -> {
+                    val total = found.sumOf { it.second.amount ?: 0.0 }
+                    val money = if (total % 1.0 == 0.0) "$${total.toInt()}" else "$" + "%.2f".format(total)
+                    "$money spent ${question.period.phrase}."
                 }
                 question.amount && single == "water" ->
                     "${found.sumOf { it.second.ml ?: 0 }} ml of water ${question.period.phrase}."

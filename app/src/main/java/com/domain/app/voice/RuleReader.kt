@@ -12,9 +12,32 @@ import java.time.LocalTime
  */
 class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
 
-    fun read(words: String): List<Item> {
+    /**
+     * [context] is what the words answer, from a prompt: "sleep", a meal
+     * ("breakfast"), "water", or null for something said unprompted.
+     */
+    fun read(words: String, context: String? = null): List<Item> {
         val text = clean(words)
-        val meal = MEALS.entries.firstOrNull { (pattern, _) -> Regex("\\b($pattern)\\b").containsMatchIn(text) }?.value
+        if (context != null && NEGATIVE.containsMatchIn(text)) return emptyList()
+        val spent = spend(text)
+        // Money is read once, on its own, so it isn't also a food.
+        val items = readText(text.replace(MONEY_WORDS, " ").replace(MONEY_SIGN, " "), context)
+        spent?.let { items += it }
+        when {
+            context == "sleep" && items.none { it.kind == "sleep" } ->
+                items.add(0, Item("sleep", sleepLabel(text), minutes = minutes(text)))
+            context == "water" && items.none { it.group == "water" } -> {
+                val count = Regex("\\b(${Numbers.PATTERN})\\s+(glass|glasses|bottles?|cups?)\\b").find(text)
+                    ?.let { Numbers.parse(it.groupValues[1]) } ?: 1
+                items += Item("drink", "water", count = count, group = "water", ml = waterMl(text, count))
+            }
+        }
+        return items
+    }
+
+    private fun readText(text: String, context: String?): MutableList<Item> {
+        val meal = context?.takeIf { it in MEALS.values }
+            ?: MEALS.entries.firstOrNull { (pattern, _) -> Regex("\\b($pattern)\\b").containsMatchIn(text) }?.value
         // A sentence about a meal, or eating, makes plain nouns food.
         var food = meal != null || EAT.containsMatchIn(text)
 
@@ -39,7 +62,7 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
             }
         }
         // "I just had lunch": a meal with nothing else said.
-        if (meal != null && items.none { it.kind == "food" }) {
+        if (meal != null && context == null && items.none { it.kind == "food" }) {
             items.add(0, Item("food", meal, meal = meal))
         }
         return items
@@ -52,6 +75,8 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
             when {
                 item.kind == "activity" && item.minutes != null -> "${item.label}, ${item.minutes} minutes"
                 item.ml != null && item.label == "water" -> "${item.ml} ml of water"
+                item.kind == "spend" -> item.label
+                item.kind == "sleep" && item.minutes != null -> "sleep, ${hours(item.minutes)}"
                 item.count > 1 -> "${item.count} ${item.label}"
                 else -> item.label
             }
@@ -60,9 +85,46 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
         return "Logged $list"
     }
 
+    /** How long, for a follow-up answer: "forty minutes", "six hours", or a bare "six". */
+    fun duration(words: String, bareIsHours: Boolean): Int? {
+        val text = clean(words)
+        minutes(text)?.let { return it }
+        val n = Regex("\\b(${Numbers.PATTERN})\\b").find(text)?.let { Numbers.parse(it.groupValues[1]) } ?: return null
+        return if (bareIsHours) n * 60 else n
+    }
+
+    /** How much, for a follow-up answer: "twelve dollars", "$12.50", or a bare "twelve". */
+    fun money(words: String): Item? {
+        val text = clean(words)
+        spend(text)?.let { return it }
+        val n = Regex("\\b(${Numbers.PATTERN})\\b").find(text)?.let { Numbers.parse(it.groupValues[1]) } ?: return null
+        return Item("spend", "$$n", amount = n.toDouble())
+    }
+
+    private fun hours(minutes: Int): String =
+        if (minutes % 60 == 0) "${minutes / 60} hours" else "%.1f hours".format(minutes / 60.0)
+
+    /** "twelve dollars fifty", "$12.50", "20 bucks" -> a spend item. */
+    private fun spend(text: String): Item? {
+        val m = MONEY_SIGN.find(text)
+        val amount = m?.groupValues?.get(1)?.toDoubleOrNull() ?: run {
+            val w = MONEY_WORDS.find(text) ?: return null
+            val dollars = Numbers.parse(w.groupValues[1]) ?: return null
+            dollars + (w.groupValues[2].takeIf { it.isNotEmpty() }?.let(Numbers::parse) ?: 0) / 100.0
+        }
+        val label = if (amount % 1.0 == 0.0) "$${amount.toInt()}" else "$" + "%.2f".format(amount)
+        return Item("spend", label, amount = amount)
+    }
+
+    private fun sleepLabel(text: String): String =
+        text.replace(Regex("\\b(?:for |about |around )?(${Numbers.PATTERN}|half an?) (?:and a half )?hours?\\b"), " ")
+            .replace(Regex("\\s+"), " ").trim()
+            .replace(Regex("^(?:(?:i|it|was|slept|sleep|yeah|yes|um|pretty|really|quite|about|around|and)\\s+)*"), "")
+            .split(" ").take(4).joinToString(" ").ifBlank { "sleep" }
+
     private fun clean(words: String): String =
         words.lowercase()
-            .replace(Regex("[.!?]"), " ")
+            .replace(Regex("(?<!\\d)\\.|\\.(?!\\d)|[!?]"), " ")
             .replace(Regex("\\b(um+|uh+|er+|like|you know)\\b"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
@@ -75,7 +137,8 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
     private fun activity(clause: String): Item? {
         val label = ACTIVITIES.entries.firstOrNull { (pattern, _) -> Regex("\\b($pattern)\\b").containsMatchIn(clause) }?.value
             ?: return null
-        return Item("activity", label, minutes = minutes(clause))
+        val kind = if (label == "sleep" || label == "nap") "sleep" else "activity"
+        return Item(kind, label, minutes = minutes(clause))
     }
 
     private fun minutes(clause: String): Int? {
@@ -113,7 +176,7 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
         val label = clause
             .replace(Regex("\\bfor (breakfast|brunch|lunch|dinner|tea|supper|a snack|snack|dessert)\\b"), " ")
             .replace(Regex("\\b(today|tonight|this morning|this afternoon|this evening|just now|earlier)\\b"), " ")
-            .replace(Regex("^(?:(?:and|so|then|i|i've|ive|we|also|just|have|has|had|ate|eaten|eat|eating|having|got|grabbed|made|cooked|was|some|a|an|the|my|for|with|bit of|piece of|bowl of|plate of)\\s+)+"), "")
+            .replace(Regex("^(?:(?:yes|yeah|yep|and|so|then|i|i've|ive|we|also|just|have|has|had|ate|eaten|eat|eating|having|got|grabbed|bought|made|cooked|was|some|a|an|the|my|for|with|bit of|piece of|bowl of|plate of)\\s+)+"), "")
             .replace(Regex("\\s+(too|as well)$"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
@@ -129,7 +192,13 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
     }
 
     companion object {
-        const val NAME = "rules-1"
+        const val NAME = "rules-2"
+
+        private val MONEY_SIGN = Regex("\\$\\s?(\\d+(?:\\.\\d{1,2})?)")
+        private val MONEY_WORDS = Regex(
+            "\\b(?:for\\s+)?(${Numbers.PATTERN})\\s+(?:dollars?|bucks)(?:\\s+(?:and\\s+)?(${Numbers.PATTERN})(?:\\s+cents)?)?\\b"
+        )
+        private val NEGATIVE = Regex("^(?:no|nope|nah|not yet|not really|nothing|skipped(?: it)?|didn't|haven't)\\b")
 
         private val EAT = Regex("\\b(ate|eaten|eat|eating|snacked)\\b")
         private val HAD = Regex("\\b(had|have had|having|got|grabbed)\\b")

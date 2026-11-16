@@ -12,6 +12,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.domain.app.prompts.PromptInbox
 import com.domain.app.ui.components.navigation.AnthemosBottomBar
 import com.domain.app.ui.dashboard.DashboardScreen
 import com.domain.app.ui.voice.VoiceScreen
@@ -43,7 +44,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun noteListen(intent: Intent?) {
-        if (intent?.action in LISTEN_ACTIONS) listenRequest += 1
+        if (intent?.action !in LISTEN_ACTIONS) return
+        // Opened from a prompt: Speak asks it and listens for the answer.
+        PromptInbox.fromIntent(intent)?.let { PromptInbox.waiting.value = it }
+        listenRequest += 1
     }
 
     companion object {

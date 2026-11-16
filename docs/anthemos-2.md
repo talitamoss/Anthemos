@@ -26,6 +26,27 @@ Fixed kinds (Food, Water, Caffeine...) lock us in: a sentence holds several thin
 
 Not on a big model on the phone, and not on a server we run for everyone: on **each person's own server**, the same one that holds their pod. Hosting and setting that up is the service people pay for. The phone does what it can alone (speech, rules, simple questions) and sends the rest to its owner's server: Whisper for harder speech, a language model as the better reader and for harder questions. No one else's server sees the words.
 
+## Prompts
+
+Anthemos asks about **gaps, not a script** (`prompts/PromptRules.kt`). A prompt fires only when something usual is missing from today:
+
+| Prompt | When | Asked if |
+|---|---|---|
+| How did you sleep? | 7:00–11:00 | no sleep recorded today |
+| Had breakfast yet? | 8:30–10:30 | no breakfast |
+| What did you have for lunch? | 13:00–14:30 | no lunch |
+| Had any water today? | 14:00–16:00 | none today, and water is usual (3 of the last 14 days) |
+| Get outside or move today? | 16:30–18:00 | no activity, and activity is usual |
+| What did you have for dinner? | 19:00–20:30 | no dinner |
+| Anything from today you want to keep? | 20:30–21:00 | always |
+| Anything to remember from the call with X? | after a call made through Anthemos ends | always |
+
+- At most three a day; quiet from 21:00 to 7:00; each at most once a day.
+- Three unanswered in a row rests a prompt for a week; "Stop asking this" ends it.
+- Prompts arrive as notifications (checked every 15 minutes on the phone, no Google services). Tapping opens Speak listening; the answer is read in the light of the question ("seven hours" to "How did you sleep?" is sleep) and keeps the question with the entry.
+- **One follow-up per entry** when an obvious detail is missing: how long a walk was, how many hours of sleep, how much something bought cost. The answer fills in that entry.
+- Later, the reader on the person's own server words prompts and follow-ups from context ("the bus was late again, third time this week").
+
 ## Pieces
 
 1. **Ears.** Anthemos registers as the phone's default assistant (`VoiceInteractionService`), so a headset or steering-wheel button opens it. Push to talk first; a wake word is optional later. Speech becomes text on the phone (Whisper via whisper.cpp, or Android's on-device recogniser).
@@ -69,6 +90,14 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 - **Calls are kept as entries** when dialled, so they can be asked about. Only calls made through Anthemos are known; the phone's call log could be added.
 - **Calling copes with mishearing**: call, ring, phone, "give Dad a call", and "call" heard as "cool" or "coal" (then only if a contact matches; otherwise the words are kept).
 - **Who "Mum" is**: taught names ("Dad is John Moss", or it asks when it doesn't know), contact nicknames, relations on a contact card, and names one letter off. Taught names are in app-private preferences for now.
+
+**alpha 4:** prompts and follow-ups (above); money ("fifteen dollars fifty", "$12") and "How much have I spent this week?".
+
+**Next: what the phone already knows** (opt-in, each one separately):
+- **Screen time:** daily totals and per app, from Android's usage stats (special access in Settings).
+- **Sleep, estimated:** last phone use at night to first in the morning, from the same usage stats; the morning prompt then asks "In bed about 11, up at 6:40, how was it?"
+- **Location:** places rather than raw tracks: home, work, "a new place", time spent, from the phone's own location (GrapheneOS has its own network location). OsmAnd tracks for walks and rides.
+- **Steps:** the phone's step counter sensor, no Google Fit.
 
 **Not yet:** signatures on entries, the on-device language model, spoken questions, the full default-assistant role (`VoiceInteractionService`), a wake word, pod sync.
 

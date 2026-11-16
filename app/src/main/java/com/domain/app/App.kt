@@ -5,6 +5,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.domain.app.core.storage.encryption.EncryptionManager
+import com.domain.app.prompts.PromptWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -29,6 +30,9 @@ class App : Application(), Configuration.Provider {
         
         // Initialize any app-wide components here
         initializeApp()
+
+        // Anthemos 2.0: look for a due prompt every fifteen minutes.
+        PromptWorker.schedule(this)
     }
     
     /**

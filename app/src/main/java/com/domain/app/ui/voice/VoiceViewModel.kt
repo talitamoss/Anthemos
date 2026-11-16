@@ -10,6 +10,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
+import com.domain.app.prompts.Prompt
+import com.domain.app.prompts.PromptInbox
+import com.domain.app.prompts.PromptLog
+import com.domain.app.prompts.PromptRules
+import com.domain.app.prompts.PromptWorker
 import com.domain.app.voice.Contacts
 import com.domain.app.voice.Entry
 import com.domain.app.voice.Item
@@ -50,7 +55,9 @@ data class VoiceUiState(
     /** A call waiting for yes or no. */
     val pendingCall: PendingCall? = null,
     /** A word ("dad") waiting to be told which contact it means. */
-    val pendingName: String? = null
+    val pendingName: String? = null,
+    /** A prompt or follow-up waiting for its answer. */
+    val prompt: Prompt? = null
 )
 
 data class PendingCall(val match: Contacts.Match, val said: String)
@@ -71,6 +78,7 @@ class VoiceViewModel @Inject constructor(
     private val parser = RuleParser()
     private val reader = RuleReader()
     private val contacts = Contacts(context)
+    private val promptLog = PromptLog(context)
     private var lastSavedId: String? = null
 
     private val _state = MutableStateFlow(VoiceUiState())
@@ -90,7 +98,9 @@ class VoiceViewModel @Inject constructor(
 
     fun listen() {
         speaker.say("") // stop anything being spoken
-        _state.update { it.copy(phase = VoicePhase.LISTENING, heard = "", reply = "") }
+        // Opened from a prompt notification: show its question while listening.
+        val prompt = PromptInbox.take() ?: _state.value.prompt
+        _state.update { it.copy(phase = VoicePhase.LISTENING, heard = "", reply = prompt?.text.orEmpty(), prompt = prompt) }
         listener.start(object : Listener.Callbacks {
             override fun onListening() = Unit
             override fun onPartial(text: String) = _state.update { it.copy(heard = text) }
@@ -99,7 +109,7 @@ class VoiceViewModel @Inject constructor(
                 handle(text)
             }
             override fun onError(message: String) {
-                _state.update { it.copy(phase = phaseFor(it.pendingCall), reply = message, pendingName = null) }
+                _state.update { it.copy(phase = phaseFor(it.pendingCall), reply = message, pendingName = null, prompt = null) }
             }
         })
     }
@@ -133,8 +143,17 @@ class VoiceViewModel @Inject constructor(
             return
         }
 
+        _state.value.prompt?.let { prompt ->
+            _state.update { it.copy(prompt = null) }
+            viewModelScope.launch { answer(prompt, text) }
+            return
+        }
+
         when (val request = parser.parse(text)) {
-            is VoiceRequest.Record -> viewModelScope.launch { save(request.transcript, request.items, request.reply) }
+            is VoiceRequest.Record -> viewModelScope.launch {
+                val entry = save(request.transcript, request.items, null)
+                followUpOr(entry, request.reply)
+            }
             is VoiceRequest.Undo -> viewModelScope.launch { undoLast() }
             is VoiceRequest.Call -> viewModelScope.launch { prepareCall(request) }
             is VoiceRequest.Teach -> viewModelScope.launch { teach(request) }
@@ -142,11 +161,68 @@ class VoiceViewModel @Inject constructor(
         }
     }
 
-    private suspend fun save(words: String, items: List<Item>, replyText: String?) {
-        val entry = Entry(UUID.randomUUID().toString(), Instant.now(), words, items, RuleReader.NAME)
+    private suspend fun save(words: String, items: List<Item>, replyText: String?, prompt: String? = null): Entry {
+        val entry = Entry(UUID.randomUUID().toString(), Instant.now(), words, items, RuleReader.NAME, prompt)
         withContext(Dispatchers.IO) { dataRepository.saveDataPoint(entry.toDataPoint()) }
         lastSavedId = entry.id
         replyText?.let { reply(it) }
+        return entry
+    }
+
+    /** Says [said], and asks one follow-up if an obvious detail is missing. */
+    private fun followUpOr(entry: Entry, said: String) {
+        val next = PromptRules.followUp(entry)
+        if (next == null) {
+            reply(said)
+            return
+        }
+        val question = "$said. ${next.text}"
+        _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, prompt = next) }
+        speaker.say(question) {
+            viewModelScope.launch(Dispatchers.Main) {
+                if (_state.value.prompt == next) listen()
+            }
+        }
+    }
+
+    /** An answer to a prompt or a follow-up. */
+    private suspend fun answer(prompt: Prompt, text: String) {
+        if (prompt.entryId != null) {
+            addTo(prompt, text)
+            return
+        }
+        promptLog.answered(prompt.id)
+        val items = reader.read(text, prompt.context)
+        val entry = save(text, items, null, prompt = prompt.text)
+        followUpOr(entry, if (items.isEmpty()) "Kept" else reader.reply(items))
+    }
+
+    /** A follow-up answer fills in the detail on the entry it was about. */
+    private suspend fun addTo(prompt: Prompt, answer: String) {
+        val entry = withContext(Dispatchers.IO) { dataRepository.getDataPoint(prompt.entryId!!) }?.let(Entry::from)
+        if (entry == null) {
+            reply("Noted")
+            return
+        }
+        val items = entry.items.toMutableList()
+        var said = "Noted"
+        when (prompt.field) {
+            "minutes" -> {
+                val i = items.indexOfFirst { (it.kind == "activity" || it.kind == "sleep") && it.minutes == null }
+                val minutes = if (i >= 0) reader.duration(answer, bareIsHours = items[i].kind == "sleep") else null
+                if (minutes != null) {
+                    items[i] = items[i].copy(minutes = minutes)
+                    said = if (items[i].kind == "sleep") "Added, ${minutes / 60.0} hours".replace(".0 ", " ") else "Added, $minutes minutes"
+                }
+            }
+            "amount" -> reader.money(answer)?.let {
+                items += it
+                said = "Added, ${it.label}"
+            }
+        }
+        val updated = entry.copy(words = entry.words.trimEnd('.', ' ') + ". " + answer, items = items)
+        withContext(Dispatchers.IO) { dataRepository.saveDataPoint(updated.toDataPoint()) }
+        reply(said)
     }
 
     private suspend fun answer(request: VoiceRequest.Ask) {
@@ -221,7 +297,7 @@ class VoiceViewModel @Inject constructor(
 
     private suspend fun keepWords(transcript: String) {
         val items = reader.read(transcript)
-        save(transcript, items, reader.reply(items))
+        followUpOr(save(transcript, items, null), reader.reply(items))
     }
 
     /** Asks a yes/no question about [call], then listens for the answer. */
@@ -240,6 +316,8 @@ class VoiceViewModel @Inject constructor(
         viewModelScope.launch {
             save("Called ${call.match.name}", listOf(Item("call", call.match.name, said = call.said)), null)
         }
+        // Afterwards: "Anything to remember from the call?"
+        PromptWorker.afterCall(context, call.match.name)
         val action = if (granted(Manifest.permission.CALL_PHONE)) Intent.ACTION_CALL else Intent.ACTION_DIAL
         val intent = Intent(action, Uri.parse("tel:${Uri.encode(call.match.number)}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
