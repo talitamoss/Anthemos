@@ -16,8 +16,10 @@ android {
         applicationId = "com.anthemos.app.two"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3
-        versionName = "2.0.0-alpha2"
+        // CI numbers each build so the in-app updater can tell newer from older.
+        val build = System.getenv("ANTHEMOS_BUILD")?.toInt() ?: 3
+        versionCode = build
+        versionName = "2.0.0-alpha2 (build $build)"
 
         // Phones only: keeps the speech engine's native code to one copy.
         ndk { abiFilters += listOf("arm64-v8a") }
@@ -25,7 +27,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // One fixed key (a CI secret), so each build installs over the last.
+    // Without it, local builds use the usual per-machine debug key.
+    val keystore = System.getenv("ANTHEMOS_KEYSTORE")?.let(::file)?.takeIf { it.exists() }
+    signingConfigs {
+        if (keystore != null) {
+            create("anthemos") {
+                storeFile = keystore
+                storePassword = System.getenv("ANTHEMOS_KEYSTORE_PASSWORD")
+                keyAlias = "anthemos"
+                keyPassword = System.getenv("ANTHEMOS_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (keystore != null) signingConfig = signingConfigs.getByName("anthemos")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

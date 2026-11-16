@@ -50,6 +50,7 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 - **Records** are saved to the existing encrypted store with `source = "voice"` and the transcript in `metadata`, using the same value keys as manual entries. Today's entries show under the button, with **Undo last**.
 - **Calls** look up the contact, ask "Call Sam?" out loud, then listen for yes or no (buttons too), and only then dial.
 - **Opened to listen:** a headset or Bluetooth long press (`VOICE_COMMAND`), the assist gesture if Anthemos is chosen for it, or the `com.anthemos.LISTEN` intent all open Speak listening.
+- **Updates itself** (`update/Updater.kt`): on opening, Speak checks `anthemos.org/builds/anthemos2-latest.json` and shows "Update ready" with one button. It downloads the APK, checks its SHA-256 and installs it through Android's package installer. The first time, Android asks to allow "Install unknown apps" for Anthemos 2. CI signs every build with one fixed key (secrets `ANTHEMOS_KEYSTORE_B64` and `ANTHEMOS_KEYSTORE_PASSWORD`) and numbers it 100 + the run number. Before this, each build had a throwaway key, so a new build wouldn't install over the old one.
 - **Installed beside 1.x** as `com.anthemos.app.two` ("Anthemos 2"), so 1.x data is untouched. CI publishes each build as `anthemos.org/builds/anthemos2-latest.apk`.
 
 **Next (alpha 3):** app commands: "play X on Spotify" (Android's play-from-search), pause and skip for whatever is playing, start and stop track recording in OsmAnd (its intent API), "open X", timers.
@@ -59,7 +60,7 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 ## Outside things we need
 
 - [ ] **Phones.** A Pixel 8 or newer (have one), plus a second Android phone for testing if possible.
-- [ ] **Builds.** A GitHub Actions APK build. `smart-anthemos` added a build workflow; check that it still runs. Signing keys go in ProtonPass.
+- [x] **Builds.** GitHub Actions builds and publishes every push to `anthemos-2`, signed with the fixed key. The keystore also needs a copy in ProtonPass.
 - [ ] **Distribution.** Sideload first. Later: a Play Console account and a privacy policy. Play limits SMS permissions to default messaging apps, so calls are easy and texts are harder.
 - [ ] **Speech model.** Whisper (base or small, about 75–250 MB). MIT licence.
 - [ ] **Language model.** About 1 GB on the phone. Licence check: Qwen is Apache 2.0; Gemma and Llama have conditions.

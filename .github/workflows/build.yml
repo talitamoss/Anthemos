@@ -26,7 +26,18 @@ jobs:
       - name: Unit tests
         run: ./gradlew testDebugUnitTest
 
+      - name: Signing key
+        if: github.ref_name == 'anthemos-2'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANTHEMOS_KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/anthemos.jks"
+          echo "ANTHEMOS_KEYSTORE=$RUNNER_TEMP/anthemos.jks" >> $GITHUB_ENV
+          echo "ANTHEMOS_BUILD=$((100 + GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
+
       - name: Build Debug APK
+        env:
+          ANTHEMOS_KEYSTORE_PASSWORD: ${{ secrets.ANTHEMOS_KEYSTORE_PASSWORD }}
         run: ./gradlew assembleDebug
 
       - name: Rename APK with timestamp
@@ -43,6 +54,12 @@ jobs:
           echo "apk_name=${APK_NAME}" >> $GITHUB_OUTPUT
           echo "apk_path=app/build/outputs/apk/debug/${APK_NAME}" >> $GITHUB_OUTPUT
           echo "latest=${LATEST}" >> $GITHUB_OUTPUT
+          # What the in-app updater reads (update/Updater.kt).
+          if [ "${GITHUB_REF_NAME}" = "anthemos-2" ]; then
+            SHA=$(sha256sum app/build/outputs/apk/debug/${APK_NAME} | cut -d' ' -f1)
+            printf '{"versionCode":%s,"versionName":"2.0.0-alpha2 (build %s)","apk":"%s","sha256":"%s"}\n' \
+              "$ANTHEMOS_BUILD" "$ANTHEMOS_BUILD" "$APK_NAME" "$SHA" > app/build/outputs/apk/debug/anthemos2-latest.json
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -62,3 +79,7 @@ jobs:
         run: |
           scp ${{ steps.rename.outputs.apk_path }} deploy@anthemos.org:/var/www/anthemos/builds/
           ssh deploy@anthemos.org "cd /var/www/anthemos/builds && ln -sf ${{ steps.rename.outputs.apk_name }} ${{ steps.rename.outputs.latest }}"
+          # Published after the APK, so the updater never points at a missing file.
+          if [ -f app/build/outputs/apk/debug/anthemos2-latest.json ]; then
+            scp app/build/outputs/apk/debug/anthemos2-latest.json deploy@anthemos.org:/var/www/anthemos/builds/
+          fi

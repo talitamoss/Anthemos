@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.core.data.DataPoint
+import com.domain.app.update.UpdateBanner
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -106,6 +107,8 @@ fun VoiceScreen(
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
             }
         }
+
+        UpdateBanner(Modifier.padding(top = 8.dp))
 
         Spacer(Modifier.height(24.dp))
 
