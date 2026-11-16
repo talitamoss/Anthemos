@@ -41,8 +41,7 @@ data class VoiceUiState(
     /** What Anthemos said back. */
     val reply: String = "",
     /** A call waiting for yes or no. */
-    val pendingCall: Contacts.Match? = null,
-    val onDeviceSpeech: Boolean = false
+    val pendingCall: Contacts.Match? = null
 )
 
 /**
@@ -62,7 +61,7 @@ class VoiceViewModel @Inject constructor(
     private val contacts = Contacts(context)
     private var lastSavedId: String? = null
 
-    private val _state = MutableStateFlow(VoiceUiState(onDeviceSpeech = listener.onDevice))
+    private val _state = MutableStateFlow(VoiceUiState())
     val state: StateFlow<VoiceUiState> = _state.asStateFlow()
 
     /** Today's entries, newest first. */
@@ -73,9 +72,13 @@ class VoiceViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    init {
+        listener.prepare()
+    }
+
     fun listen() {
         speaker.say("") // stop anything being spoken
-        _state.update { it.copy(phase = VoicePhase.LISTENING, heard = "") }
+        _state.update { it.copy(phase = VoicePhase.LISTENING, heard = "", reply = "") }
         listener.start(object : Listener.Callbacks {
             override fun onListening() = Unit
             override fun onPartial(text: String) = _state.update { it.copy(heard = text) }
@@ -92,15 +95,13 @@ class VoiceViewModel @Inject constructor(
         })
     }
 
-    fun stopListening() {
-        listener.stop()
-        _state.update { it.copy(phase = if (it.pendingCall != null) VoicePhase.CONFIRMING else VoicePhase.IDLE) }
-    }
+    /** Stop tapped: act on what was heard so far. */
+    fun stopListening() = listener.finish()
 
     /** Yes or no to a pending call, by tap. */
     fun confirm(yes: Boolean) {
         val call = _state.value.pendingCall ?: return
-        listener.stop()
+        listener.cancel()
         if (yes) dial(call) else reply("Okay, not calling", pendingCall = null)
     }
 
@@ -196,7 +197,7 @@ class VoiceViewModel @Inject constructor(
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
     override fun onCleared() {
-        listener.stop()
+        listener.shutdown()
         speaker.shutdown()
     }
 

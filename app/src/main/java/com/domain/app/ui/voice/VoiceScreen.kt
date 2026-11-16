@@ -5,7 +5,14 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -123,23 +131,39 @@ fun VoiceScreen(
         Spacer(Modifier.height(24.dp))
 
         val listening = state.phase == VoicePhase.LISTENING
-        FilledIconButton(
-            onClick = { if (listening) viewModel.stopListening() else talk() },
-            modifier = Modifier.size(120.dp).semantics {
-                contentDescription = if (listening) "Stop listening" else "Talk"
-            },
-            shape = CircleShape,
-            colors = if (listening) {
-                IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
-            } else {
-                IconButtonDefaults.filledIconButtonColors()
+        Box(Modifier.size(180.dp), contentAlignment = Alignment.Center) {
+            // A ring that breathes while the microphone is open.
+            if (listening) {
+                val pulse = rememberInfiniteTransition(label = "listening")
+                val scale by pulse.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.45f,
+                    animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+                    label = "ring"
+                )
+                Box(
+                    Modifier.size(120.dp).scale(scale)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f), CircleShape)
+                )
             }
-        ) {
-            Icon(
-                if (listening) Icons.Filled.Stop else Icons.Filled.Mic,
-                contentDescription = null,
-                modifier = Modifier.size(56.dp)
-            )
+            FilledIconButton(
+                onClick = { if (listening) viewModel.stopListening() else talk() },
+                modifier = Modifier.size(120.dp).semantics {
+                    contentDescription = if (listening) "Stop listening" else "Talk"
+                },
+                shape = CircleShape,
+                colors = if (listening) {
+                    IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.error)
+                } else {
+                    IconButtonDefaults.filledIconButtonColors()
+                }
+            ) {
+                Icon(
+                    if (listening) Icons.Filled.Stop else Icons.Filled.Mic,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp)
+                )
+            }
         }
 
         if (state.pendingCall != null) {
@@ -148,16 +172,6 @@ fun VoiceScreen(
                 Button(onClick = { viewModel.confirm(true) }) { Text("Yes, call") }
                 OutlinedButton(onClick = { viewModel.confirm(false) }) { Text("No") }
             }
-        }
-
-        if (!state.onDeviceSpeech) {
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Speech is recognised by the phone's speech service, which may use the network.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
         }
 
         Spacer(Modifier.height(24.dp))

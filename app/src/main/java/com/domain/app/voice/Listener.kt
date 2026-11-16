@@ -2,19 +2,24 @@
 package com.domain.app.voice
 
 import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
+import android.os.Handler
+import android.os.Looper
+import org.json.JSONObject
+import org.vosk.Model
+import org.vosk.Recognizer
+import org.vosk.android.RecognitionListener
+import org.vosk.android.SpeechService
+import java.io.File
+import java.util.concurrent.Executors
 
 /**
- * Ears: speech to text, on the phone where it can be (docs/anthemos-2.md).
- * On Android 12+ with on-device recognition (Pixel 8), nothing leaves the
- * phone; otherwise the system recogniser is asked to prefer offline.
+ * Ears: speech to text, always on the phone (docs/anthemos-2.md).
  *
- * Must be used from the main thread.
+ * Uses Vosk with a small English model shipped inside the app, so it works
+ * without Google's speech service (GrapheneOS has none) and nothing leaves
+ * the phone. The model is copied out of the APK on first use.
+ *
+ * Must be used from the main thread; callbacks arrive on the main thread.
  */
 class Listener(private val context: Context) {
 
@@ -23,69 +28,159 @@ class Listener(private val context: Context) {
         fun onPartial(text: String)
         fun onHeard(text: String)
         fun onError(message: String)
-        fun onLevel(rms: Float) = Unit
     }
 
-    private var recognizer: SpeechRecognizer? = null
+    private val main = Handler(Looper.getMainLooper())
+    private val worker = Executors.newSingleThreadExecutor()
+    private var model: Model? = null
+    private var loading = false
+    private var loadFailed = false
+    private var waiting: Callbacks? = null
+    private var session: Session? = null
 
-    val onDevice: Boolean
-        get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+    /** Copies and loads the model in the background, so the first tap is quick. */
+    fun prepare() {
+        if (model != null || loading) return
+        loading = true
+        loadFailed = false
+        worker.execute {
+            val loaded = runCatching { Model(unpack().absolutePath) }
+            main.post {
+                loading = false
+                loaded.onSuccess { model = it }.onFailure { loadFailed = true }
+                waiting?.let { callbacks ->
+                    waiting = null
+                    if (model != null) start(callbacks) else callbacks.onError("The speech model couldn't load")
+                }
+            }
+        }
+    }
 
     fun start(callbacks: Callbacks) {
-        stop()
-        val r = if (onDevice) {
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        cancel()
+        val m = model
+        if (m == null) {
+            waiting = callbacks
+            if (loadFailed || !loading) prepare()
+            return
+        }
+        session = try {
+            Session(m, callbacks).also { it.begin() }
+        } catch (e: Exception) {
+            callbacks.onError("The microphone isn't available")
+            null
+        }
+    }
+
+    /** Stops listening and makes sense of what was said so far. */
+    fun finish() {
+        waiting = null
+        session?.finish()
+    }
+
+    /** Stops listening and drops what was said. */
+    fun cancel() {
+        waiting = null
+        session?.release()
+        session = null
+    }
+
+    fun shutdown() {
+        cancel()
+        worker.shutdown()
+        model?.close()
+        model = null
+    }
+
+    /** One turn of listening. Stale callbacks from an old turn are ignored. */
+    private inner class Session(model: Model, private val callbacks: Callbacks) : RecognitionListener {
+        private val recognizer = Recognizer(model, SAMPLE_RATE)
+        private val service = SpeechService(recognizer, SAMPLE_RATE)
+        private var done = false
+
+        fun begin() {
+            service.startListening(this, TIMEOUT_MS)
+            callbacks.onListening()
+        }
+
+        fun finish() {
+            if (!done) service.stop() // onFinalResult follows
+        }
+
+        fun release() {
+            done = true
+            service.cancel()
+            service.shutdown()
+            recognizer.close()
+            if (session === this) session = null
+        }
+
+        override fun onPartialResult(hypothesis: String?) {
+            if (done) return
+            text(hypothesis, "partial")?.let(callbacks::onPartial)
+        }
+
+        // Vosk calls this when it hears a pause: the end of what was said.
+        override fun onResult(hypothesis: String?) {
+            if (done) return
+            text(hypothesis, "text")?.let { heard(it) }
+        }
+
+        override fun onFinalResult(hypothesis: String?) {
+            if (done) return
+            val text = text(hypothesis, "text")
+            if (text != null) heard(text) else fail("I didn't catch that")
+        }
+
+        override fun onError(exception: Exception?) {
+            if (!done) fail("The microphone isn't available")
+        }
+
+        override fun onTimeout() {
+            if (!done) fail("I didn't catch that")
+        }
+
+        private fun heard(text: String) {
+            release()
+            callbacks.onHeard(text)
+        }
+
+        private fun fail(message: String) {
+            release()
+            callbacks.onError(message)
+        }
+    }
+
+    /** Copies the model out of the APK once; a marker says the copy finished. */
+    private fun unpack(): File {
+        val dir = File(context.filesDir, MODEL_NAME)
+        val marker = File(dir, ".ready")
+        if (marker.exists()) return dir
+        dir.deleteRecursively()
+        copyAsset(MODEL_ASSET, dir)
+        marker.writeText(MODEL_NAME)
+        return dir
+    }
+
+    private fun copyAsset(path: String, to: File) {
+        val children = context.assets.list(path).orEmpty()
+        if (children.isEmpty()) {
+            to.parentFile?.mkdirs()
+            context.assets.open(path).use { input -> to.outputStream().use { input.copyTo(it) } }
         } else {
-            SpeechRecognizer.createSpeechRecognizer(context)
+            to.mkdirs()
+            children.forEach { copyAsset("$path/$it", File(to, it)) }
         }
-        recognizer = r
-        r.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = callbacks.onListening()
-            override fun onBeginningOfSpeech() = Unit
-            override fun onRmsChanged(rmsdB: Float) = callbacks.onLevel(rmsdB)
-            override fun onBufferReceived(buffer: ByteArray?) = Unit
-            override fun onEndOfSpeech() = Unit
-            override fun onEvent(eventType: Int, params: Bundle?) = Unit
-
-            override fun onPartialResults(partialResults: Bundle?) {
-                first(partialResults)?.let(callbacks::onPartial)
-            }
-
-            override fun onResults(results: Bundle?) {
-                val text = first(results)
-                if (text.isNullOrBlank()) callbacks.onError("I didn't catch that") else callbacks.onHeard(text)
-            }
-
-            override fun onError(error: Int) = callbacks.onError(describe(error))
-        })
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
-        }
-        r.startListening(intent)
     }
 
-    fun stop() {
-        recognizer?.run {
-            cancel()
-            destroy()
-        }
-        recognizer = null
-    }
+    private fun text(json: String?, key: String): String? =
+        json?.let { runCatching { JSONObject(it).optString(key) }.getOrNull() }?.trim()?.takeIf { it.isNotEmpty() }
 
-    private fun first(bundle: Bundle?): String? =
-        bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-
-    private fun describe(error: Int): String = when (error) {
-        SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "I didn't catch that"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "I need the microphone to listen"
-        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition needs the network on this phone"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Still busy, try again"
-        SpeechRecognizer.ERROR_AUDIO -> "The microphone isn't available"
-        else -> "Listening stopped ($error)"
+    companion object {
+        private const val SAMPLE_RATE = 16000f
+        private const val TIMEOUT_MS = 15_000
+        /** Fetched at build time by the fetchVoskModel task in app/build.gradle.kts. */
+        private const val MODEL_ASSET = "model-en-us"
+        private const val MODEL_NAME = "vosk-model-small-en-us-0.15"
     }
 }

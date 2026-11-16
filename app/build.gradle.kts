@@ -16,8 +16,11 @@ android {
         applicationId = "com.anthemos.app.two"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0.0-alpha1"
+        versionCode = 3
+        versionName = "2.0.0-alpha2"
+
+        // Phones only: keeps the speech engine's native code to one copy.
+        ndk { abiFilters += listOf("arm64-v8a") }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -136,7 +139,35 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // On-device speech to text (voice/Listener.kt)
+    implementation("com.alphacephei:vosk-android:0.3.75")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
 }
+
+// The speech model ships inside the APK but not in git: fetched on the first
+// build into src/main/assets/model-en-us (gitignored).
+val voskModel = "vosk-model-small-en-us-0.15"
+val fetchVoskModel by tasks.registering {
+    val out = file("src/main/assets/model-en-us")
+    val zip = layout.buildDirectory.file("$voskModel.zip").get().asFile
+    onlyIf { !File(out, "am/final.mdl").exists() }
+    doLast {
+        zip.parentFile.mkdirs()
+        uri("https://alphacephei.com/vosk/models/$voskModel.zip").toURL().openStream().use { input ->
+            zip.outputStream().use { input.copyTo(it) }
+        }
+        out.deleteRecursively()
+        copy {
+            from(zipTree(zip))
+            into(out)
+            includeEmptyDirs = false
+            // Drop the zip's top folder.
+            eachFile { relativePath = RelativePath(true, *relativePath.segments.drop(1).toTypedArray()) }
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(fetchVoskModel) }
 
 kapt {
     correctErrorTypes = true
