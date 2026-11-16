@@ -1,82 +1,97 @@
 package com.domain.app.voice
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class RuleParserTest {
-    private val parser = RuleParser(now = { LocalTime.of(13, 0) })
+    private val now = ZonedDateTime.of(2026, 11, 16, 13, 0, 0, 0, ZoneId.of("Australia/Sydney"))
+    private val parser = RuleParser(now = { LocalTime.of(13, 0) }, today = { now })
 
     private fun record(text: String) = parser.parse(text) as VoiceRequest.Record
+    private fun labels(text: String) = record(text).items.map { it.label }
 
     @Test
-    fun `lunch with what was eaten`() {
-        val r = record("I just had lunch, chicken and a salad")
-        assertEquals("food", r.pluginId)
-        assertEquals("Lunch", r.value["mealType"])
-        assertEquals("chicken and a salad", r.value["notes"])
-        assertEquals("Lunch logged", r.reply)
+    fun `several things in one sentence`() {
+        val r = record("I had a chicken sandwich for lunch and I had a salad and I also had a coffee")
+        assertEquals(listOf("chicken sandwich", "salad", "coffee"), r.items.map { it.label })
+        assertEquals(listOf("food", "food", "drink"), r.items.map { it.kind })
+        assertEquals("lunch", r.items[0].meal)
+        assertEquals("Logged chicken sandwich, salad and coffee", r.reply)
     }
 
     @Test
-    fun `food for a meal`() {
-        val r = record("I had soup and bread for dinner.")
-        assertEquals("Dinner", r.value["mealType"])
-        assertEquals("soup and bread", r.value["notes"])
+    fun `a meal then what was in it`() {
+        assertEquals(listOf("chicken", "salad"), labels("I just had lunch, chicken and a salad"))
+        assertEquals(listOf("lunch"), labels("I just had lunch"))
     }
 
     @Test
-    fun `eating without a meal takes the time of day`() {
-        val r = record("I ate a banana")
-        assertEquals("Lunch", r.value["mealType"])
-        assertEquals("a banana", r.value["notes"])
+    fun `tea as a meal is not a drink`() {
+        val r = record("we had pasta for tea")
+        assertEquals(listOf("pasta"), r.items.map { it.label })
+        assertEquals("dinner", r.items[0].meal)
     }
 
     @Test
-    fun `a call keeps the name as said`() {
-        val r = parser.parse("Call Sam Smith") as VoiceRequest.Call
-        assertEquals("Sam Smith", r.name)
+    fun `drinks with counts and groups`() {
+        val r = record("I've had two flat whites and a glass of water")
+        assertEquals(2, r.items[0].count)
+        assertEquals("coffee", r.items[0].group)
+        assertEquals(250, r.items[1].ml)
+        assertEquals(listOf("green tea"), labels("had a green tea"))
     }
 
     @Test
-    fun `water by the glass`() {
-        assertEquals(500, record("I drank two glasses of water").value["amount"])
-        assertEquals(250, record("had a glass of water").value["amount"])
-        assertEquals(330, record("I drank 330 ml of water").value["amount"])
+    fun `spoken numbers for activities`() {
+        val r = record("went for a walk for forty five minutes")
+        assertEquals("walk", r.items.single().label)
+        assertEquals(45, r.items.single().minutes)
+        assertEquals(30, record("half an hour of yoga").items.single().minutes)
     }
 
     @Test
-    fun `coffee is caffeine and steak is not tea`() {
-        assertEquals("caffeine", record("I just had a flat white").pluginId)
-        assertEquals("food", record("I had steak for dinner").pluginId)
+    fun `anything else is kept as said`() {
+        val r = record("the bus was late again")
+        assertTrue(r.items.isEmpty())
+        assertEquals("Noted", r.reply)
+        assertEquals("the bus was late again", r.transcript)
     }
 
     @Test
-    fun `movement with a length`() {
-        val r = record("I went for a walk for 40 minutes")
-        assertEquals("movement", r.pluginId)
-        assertEquals("Walk", r.value["type"])
-        assertEquals(40, r.value["duration"])
-        assertEquals(30, record("went for a run, half an hour").value["duration"])
+    fun `call in its many forms`() {
+        assertEquals("sam smith", (parser.parse("Call Sam Smith") as VoiceRequest.Call).name)
+        assertEquals("dad", (parser.parse("ring dad") as VoiceRequest.Call).name)
+        assertEquals("dad", (parser.parse("give dad a call") as VoiceRequest.Call).name)
+        assertEquals("mum", (parser.parse("can you please call mum") as VoiceRequest.Call).name)
+        assertEquals("dad", (parser.parse("phone dad on speaker") as VoiceRequest.Call).name)
     }
 
     @Test
-    fun `a note keeps the words after the cue`() {
-        val r = record("Note that the gate code is 4471")
-        assertEquals("journal", r.pluginId)
-        assertEquals("the gate code is 4471", r.value["entry"])
+    fun `call misheard is a call that isn't sure`() {
+        val cool = parser.parse("cool mum") as VoiceRequest.Call
+        assertEquals("mum", cool.name)
+        assertFalse(cool.sure)
+        assertFalse((parser.parse("coal dad") as VoiceRequest.Call).sure)
+        assertTrue((parser.parse("call dad") as VoiceRequest.Call).sure)
     }
 
     @Test
-    fun `anything else is kept as a journal entry`() {
-        val r = record("Feeling a bit tired after the drive")
-        assertEquals("journal", r.pluginId)
-        assertEquals("Feeling a bit tired after the drive", r.value["entry"])
+    fun `teaching a name`() {
+        val t = parser.parse("Dad is John Moss") as VoiceRequest.Teach
+        assertEquals("dad", t.alias)
+        assertEquals("john moss", t.name)
+        assertTrue(parser.parse("dinner is pasta") is VoiceRequest.Record)
     }
 
     @Test
-    fun undo() {
-        assertTrue(parser.parse("Undo that") is VoiceRequest.Undo)
+    fun `undo and questions are not entries`() {
+        assertTrue(parser.parse("Undo") is VoiceRequest.Undo)
+        assertTrue(parser.parse("when did I last call dad") is VoiceRequest.Ask)
+        assertTrue(parser.parse("how many coffees have I had this week") is VoiceRequest.Ask)
     }
 }

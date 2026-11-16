@@ -13,11 +13,18 @@ Two kinds of request, two rules:
 
 Every entry keeps your exact words next to what Anthemos understood. A better model later can re-read the history and find more in it.
 
-## Organising entries
+## Words first
 
-- **The kinds are the backbone.** The 1.x plugins each define a kind and its fields: Food, Water, Caffeine, Alcohol, Sleep, Movement, Meditation, Work, Social, Medical, Journal, Poo, Audio and Screen time. The voice chooses a kind and fills its fields. Fields you didn't mention stay blank; it doesn't quiz you.
-- **Nothing is lost.** Anything that fits no kind is saved as a Journal entry with your words. A pattern that keeps appearing can become a new kind later.
-- **Finding things back.** Ask by voice ("What did I eat yesterday?", "How much coffee this week?"), or look at one simple day screen that shows the day as a timeline.
+Fixed kinds (Food, Water, Caffeine...) lock us in: a sentence holds several things, and life doesn't fit a list decided in advance. So:
+
+- **The words are the record.** Each thing said is one entry: the time and exactly what was said (`voice/Entry.kt`).
+- **Readings sit on top.** A reader finds the items in the words: "chicken sandwich (lunch)", "salad", "coffee". Each item has a loose `kind` (food, drink, activity, call), a `label` in the person's own words, and a wider `group` ("flat white" is a coffee). Labels are open; nothing is a closed list. Each entry records which reader made its items, so a better reader can redo them.
+- **Recall reads both.** Questions are answered from the items, falling back to the words.
+- The 1.x kinds become views over entries rather than storage.
+
+## Where the thinking happens
+
+Not on a big model on the phone, and not on a server we run for everyone: on **each person's own server**, the same one that holds their pod. Hosting and setting that up is the service people pay for. The phone does what it can alone (speech, rules, simple questions) and sends the rest to its owner's server: Whisper for harder speech, a language model as the better reader and for harder questions. No one else's server sees the words.
 
 ## Pieces
 
@@ -53,7 +60,15 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 - **Updates itself** (`update/Updater.kt`): on opening, Speak checks `anthemos.org/builds/anthemos2-latest.json` and shows "Update ready" with one button. It downloads the APK, checks its SHA-256 and installs it through Android's package installer. The first time, Android asks to allow "Install unknown apps" for Anthemos 2. CI signs every build with one fixed key (secrets `ANTHEMOS_KEYSTORE_B64` and `ANTHEMOS_KEYSTORE_PASSWORD`) and numbers it 100 + the run number. Before this, each build had a throwaway key, so a new build wouldn't install over the old one.
 - **Installed beside 1.x** as `com.anthemos.app.two` ("Anthemos 2"), so 1.x data is untouched. CI publishes each build as `anthemos.org/builds/anthemos2-latest.apk`.
 
-**Next (alpha 3):** app commands: "play X on Spotify" (Android's play-from-search), pause and skip for whatever is playing, start and stop track recording in OsmAnd (its intent API), "open X", timers.
+**Next:** app commands: "play X on Spotify" (Android's play-from-search), pause and skip for whatever is playing, start and stop track recording in OsmAnd (its intent API), "open X", timers.
+
+**alpha 3** (words first):
+
+- **Several things per sentence**, kept as one entry with the words and the items found (`voice/RuleReader.kt`). Spoken numbers ("forty five minutes") count.
+- **Questions, answered in words and aloud** (`voice/Questions.kt`): "When did I last call Dad?", "How many coffees this week?", "How much water today?", "Did I have a coffee today?", "What did I eat yesterday?". Periods: today, yesterday, this or last week or month, this year, the last N days.
+- **Calls are kept as entries** when dialled, so they can be asked about. Only calls made through Anthemos are known; the phone's call log could be added.
+- **Calling copes with mishearing**: call, ring, phone, "give Dad a call", and "call" heard as "cool" or "coal" (then only if a contact matches; otherwise the words are kept).
+- **Who "Mum" is**: taught names ("Dad is John Moss", or it asks when it doesn't know), contact nicknames, relations on a contact card, and names one letter off. Taught names are in app-private preferences for now.
 
 **Not yet:** signatures on entries, the on-device language model, spoken questions, the full default-assistant role (`VoiceInteractionService`), a wake word, pod sync.
 

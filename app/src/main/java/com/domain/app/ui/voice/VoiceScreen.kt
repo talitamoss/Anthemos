@@ -52,7 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.domain.app.core.data.DataPoint
+import com.domain.app.voice.Entry
 import com.domain.app.update.UpdateBanner
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -114,7 +114,7 @@ fun VoiceScreen(
 
         Text(
             text = state.heard.ifEmpty {
-                if (state.phase == VoicePhase.LISTENING) "Listening…" else "Tap and say what happened, or who to call"
+                if (state.phase == VoicePhase.LISTENING) "Listening…" else "Tap and say what happened, ask a question, or say who to call"
             },
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
@@ -180,7 +180,7 @@ fun VoiceScreen(
         Spacer(Modifier.height(24.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Today", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            if (today.any { it.source == "voice" }) {
+            if (today.isNotEmpty()) {
                 TextButton(onClick = { viewModel.undo() }) { Text("Undo last") }
             }
         }
@@ -195,7 +195,7 @@ fun VoiceScreen(
             )
         }
         LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-            items(today, key = { it.id }) { point -> EntryRow(point) }
+            items(today, key = { it.id }) { entry -> EntryRow(entry) }
         }
     }
 }
@@ -203,39 +203,38 @@ fun VoiceScreen(
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
-private fun EntryRow(point: DataPoint) {
+private fun EntryRow(entry: Entry) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         Text(
-            TIME.format(point.timestamp.atZone(ZoneId.systemDefault())),
+            TIME.format(entry.time.atZone(ZoneId.systemDefault())),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 12.dp)
         )
         Column(Modifier.weight(1f)) {
-            Text(summary(point), style = MaterialTheme.typography.bodyLarge)
-            point.metadata?.get("transcript")?.let { said ->
-                if (said != summary(point)) {
-                    Text(
-                        "“$said”",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            val found = summary(entry)
+            Text(found ?: entry.words, style = MaterialTheme.typography.bodyLarge)
+            if (found != null && entry.items.none { it.kind == "call" }) {
+                Text(
+                    "\u201c${entry.words}\u201d",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 }
 
-/** One line for an entry of any kind. */
-internal fun summary(point: DataPoint): String {
-    val v = point.value
-    fun s(key: String) = v[key]?.toString()?.takeIf { it.isNotBlank() }
-    return when (point.pluginId) {
-        "food" -> listOfNotNull(s("mealType"), s("notes") ?: s("foodCategory")).joinToString(": ")
-        "water" -> "Water, ${(v["amount"] as? Number)?.toInt() ?: s("amount")} ${s("unit") ?: "ml"}"
-        "caffeine", "alcohol" -> s("type") ?: point.pluginId.replaceFirstChar { it.uppercase() }
-        "movement" -> listOfNotNull(s("type"), (v["duration"] as? Number)?.let { "${it.toInt()} min" }).joinToString(", ")
-        "journal" -> s("entry") ?: "Journal"
-        else -> point.pluginId.replaceFirstChar { it.uppercase() }
-    }
+/** What was found in an entry, in one line; null when nothing was. */
+internal fun summary(entry: Entry): String? {
+    if (entry.items.isEmpty()) return null
+    return entry.items.joinToString(", ") { item ->
+        when {
+            item.kind == "call" -> "Called ${item.label}"
+            item.minutes != null -> "${item.label}, ${item.minutes} min"
+            item.ml != null && item.label == "water" -> "water, ${item.ml} ml"
+            item.count > 1 -> "${item.count} ${item.label}"
+            else -> item.label
+        }
+    }.replaceFirstChar { it.uppercase() }
 }
