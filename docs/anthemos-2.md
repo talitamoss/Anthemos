@@ -20,7 +20,7 @@ Fixed kinds (Food, Water, Caffeine...) lock us in: a sentence holds several thin
 - **The words are the record.** Each thing said is one entry: the time and exactly what was said (`voice/Entry.kt`).
 - **Readings sit on top.** A reader finds the items in the words: "chicken sandwich (lunch)", "salad", "coffee". Each item has a loose `kind` (food, drink, activity, call), a `label` in the person's own words, and a wider `group` ("flat white" is a coffee). Labels are open; nothing is a closed list. Each entry records which reader made its items, so a better reader can redo them.
 - **Recall reads both.** Questions are answered from the items, falling back to the words.
-- **Changing an entry** edits its words, then reads them again (`voice/Change.kt`): "change the coffee to tea", "no, it was tea not coffee", "make that two", "delete the coffee", "the walk was at seven", "that was yesterday". A thing named is found in the last week's entries, newest first; "that" means the last one. Forms that could just be something to keep ("the meeting was at three") are kept as said when nothing matches.
+- **Changing an entry** edits its words, then reads them again (`voice/Change.kt`): "change the coffee to tea", "no, it was tea not coffee", "make that two", "delete the coffee", "the walk was at seven", "that was yesterday". A thing named is found in the last week's entries, newest first; "that" means the last one. When more than one of today's entries fits ("the coffee" with two coffees), it asks "Which coffee, 8:00 am or 11:00 am?" and takes a time, "first", "last", or a tap. Forms that could just be something to keep ("the meeting was at three") are kept as said when nothing matches.
 - The 1.x kinds become views over entries rather than storage.
 
 ## Where the thinking happens
@@ -107,6 +107,8 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 **alpha 5:** calendar (above); **typing** as well as talking (the same path; typed turns are answered on screen, not aloud); **screen time and estimated sleep** (below, the first two).
 
 **alpha 6:** changing entries by voice or typing (above); a quieter Speak screen (no example text, Undo only right after something is kept, one line per entry); help with Android's "restricted settings" block on usage access for apps not from a store.
+
+**alpha 7:** changes ask which one when several of today's entries fit. The own-server and shared-server reader is parked for now (Tal, 2026-11-17); the rules keep growing meanwhile.
 
 **What the phone already knows** (opt-in, each one separately):
 - **Screen time** (alpha 5, `sense/PhoneSense.kt`): from Android's usage access, turned on in Settings from a card on Speak. Android greys out the switch for apps installed outside a store until App info, ⋮, Allow restricted settings; the card says so after the first try, with an App info button. "How much screen time today?" answers with the total and the top three apps; each morning yesterday's total is kept as an entry (source "phone").

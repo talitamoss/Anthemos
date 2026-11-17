@@ -90,6 +90,20 @@ class ChangeTest {
     }
 
     @Test
+    fun `asks which when several fit`() {
+        val early = entry("1", "I had a coffee", hour = 8)
+        val late = entry("2", "had a coffee and a muffin", hour = 11)
+        val choose = Changes.apply(change("change the coffee to tea"), listOf(late, early), late, now) as Changes.Outcome.Choose
+        assertEquals("Which coffee, 8:00 am or 11:00 am?", choose.question)
+        assertEquals("1", Changes.pick("the eight one", choose.options, now)?.id)
+        assertEquals("2", Changes.pick("11", choose.options, now)?.id)
+        assertEquals("1", Changes.pick("the first", choose.options, now)?.id)
+        assertEquals("2", Changes.pick("the later one", choose.options, now)?.id)
+        val saved = Changes.applyTo(choose.change, choose.options[1], now) as Changes.Outcome.Save
+        assertEquals("had a tea and a muffin", saved.entry.words)
+    }
+
+    @Test
     fun `nothing found is said`() {
         val coffee = entry("1", "I had a coffee")
         assertEquals("I couldn't find pizza", (apply("delete the pizza", coffee) as Changes.Outcome.Say).reply)

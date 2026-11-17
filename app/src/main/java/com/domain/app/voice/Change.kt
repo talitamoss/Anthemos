@@ -139,6 +139,8 @@ object Changes {
         data class Save(val entry: Entry, val reply: String) : Outcome()
         data class Delete(val entry: Entry, val reply: String) : Outcome()
         data class Say(val reply: String) : Outcome()
+        /** More than one of today's entries fits: ask which, then [applyTo] the one picked. */
+        data class Choose(val change: Change, val options: List<Entry>, val question: String) : Outcome()
         /** Not a change after all: keep the words as an entry. */
         object Keep : Outcome()
     }
@@ -153,6 +155,16 @@ object Changes {
             is Change.Remove -> change.what
             is Change.Time -> change.what
         }
+        if (what != null) {
+            // Several of today's fit ("the coffee" with three coffees): ask rather than guess.
+            val today = entries.filter { it.time.atZone(now.zone).toLocalDate() == now.toLocalDate() && fits(it, what) }
+            if (today.size > 1) {
+                val options = today.take(3).sortedBy { it.time }
+                val times = options.map { clock(it, now) }
+                val list = times.dropLast(1).joinToString(", ") + " or " + times.last()
+                return Outcome.Choose(change, options, "Which $what, $list?")
+            }
+        }
         val target = if (what == null) last else find(entries, what)
         if (target == null) {
             return when {
@@ -161,6 +173,10 @@ object Changes {
                 else -> Outcome.Say("I couldn't find $what")
             }
         }
+        return applyTo(change, target, now)
+    }
+
+    fun applyTo(change: Change, target: Entry, now: ZonedDateTime): Outcome {
         return when (change) {
             is Change.Remove -> remove(target, change.what, now)
             is Change.Time -> move(target, change, now)
@@ -232,7 +248,42 @@ object Changes {
 
     private fun find(entries: List<Entry>, what: String): Entry? =
         entries.firstOrNull { e -> e.items.any { matches(it, what) } }
-            ?: entries.firstOrNull { e -> Regex("\\b${label(what)}\\b", RegexOption.IGNORE_CASE).containsMatchIn(e.words) }
+            ?: entries.firstOrNull { e -> mentions(e, what) }
+
+    private fun fits(entry: Entry, what: String) = entry.items.any { matches(it, what) } || mentions(entry, what)
+
+    private fun mentions(entry: Entry, what: String) =
+        Regex("\\b${label(what)}\\b", RegexOption.IGNORE_CASE).containsMatchIn(entry.words)
+
+    /**
+     * The answer to "Which coffee, 8:00 am or 11:00 am?": a time ("eight",
+     * "the 11 one"), or first / second / last / earlier / later. [options]
+     * are oldest first.
+     */
+    fun pick(answer: String, options: List<Entry>, now: ZonedDateTime): Entry? {
+        val text = answer.lowercase().replace(Regex("[.!?,]"), " ").replace(Regex("\\s+"), " ").trim()
+        ORDINALS.entries.firstOrNull { (word, _) -> Regex("\\b$word\\b").containsMatchIn(text) }?.let { (_, i) ->
+            return if (i < 0) options.lastOrNull() else options.getOrNull(i)
+        }
+        val hours = options.map { it.time.atZone(now.zone).toLocalTime() }
+        val said = Regex("\\b(\\d{1,2})(?::(\\d{2}))?\\b").find(text)?.let { it.groupValues[1].toInt() * 60 + (it.groupValues[2].toIntOrNull() ?: 0) }
+            ?: Regex("\\b(${Numbers.PATTERN})\\b").findAll(text).firstNotNullOfOrNull { Numbers.parse(it.value) }?.takeIf { it in 1..24 }?.let { it * 60 }
+            ?: return null
+        // "Eight" could be morning or evening: whichever is nearer one of the options.
+        val best = options.indices.minByOrNull { i ->
+            val at = hours[i].hour * 60 + hours[i].minute
+            minOf(Math.abs(at - said), Math.abs(at - (said + 12 * 60)))
+        }
+        return best?.let { options[it] }
+    }
+
+    private val ORDINALS = linkedMapOf(
+        "first" to 0, "earliest" to 0, "earlier" to 0, "morning one" to 0,
+        "second" to 1, "middle" to 1, "third" to 2,
+        "last" to -1, "latest" to -1, "later" to -1, "most recent" to -1
+    )
+
+    private fun clock(entry: Entry, now: ZonedDateTime) = CLOCK.format(entry.time.atZone(now.zone)).lowercase()
 
     private fun matches(item: Item, what: String): Boolean {
         val w = singular(what)

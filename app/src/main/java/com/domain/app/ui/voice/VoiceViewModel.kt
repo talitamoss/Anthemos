@@ -72,7 +72,9 @@ data class VoiceUiState(
     /** True when the screen can't be read: the phone's usage access is off. */
     val senseOff: Boolean = false,
     /** Something was just kept or changed, so Undo is offered. */
-    val canUndo: Boolean = false
+    val canUndo: Boolean = false,
+    /** A change that fits more than one entry, waiting for which. */
+    val choosing: Changes.Outcome.Choose? = null
 )
 
 data class PendingCall(val match: Contacts.Match, val said: String)
@@ -216,6 +218,13 @@ class VoiceViewModel @Inject constructor(
         _state.value.pendingName?.let { word ->
             _state.update { it.copy(pendingName = null) }
             viewModelScope.launch { learnName(word, text) }
+            return
+        }
+
+        _state.value.choosing?.let { choose ->
+            _state.update { it.copy(choosing = null) }
+            val picked = Changes.pick(text, choose.options, ZonedDateTime.now())
+            if (picked == null) reply("Okay, left as it was") else viewModelScope.launch { finish(Changes.applyTo(choose.change, picked, ZonedDateTime.now()), null) }
             return
         }
 
@@ -391,7 +400,19 @@ class VoiceViewModel @Inject constructor(
             dataRepository.getPluginData(Entry.PLUGIN_ID).first().mapNotNull(Entry::from)
         }.filter { it.source != "phone" && it.time.isAfter(since) }.sortedByDescending { it.time }
         val last = entries.firstOrNull { it.id == lastSavedId } ?: entries.firstOrNull()
-        when (val outcome = Changes.apply(request.change, entries, last, now)) {
+        finish(Changes.apply(request.change, entries, last, now), request.transcript)
+    }
+
+    /** Which one, tapped. */
+    fun choose(entry: Entry) {
+        val choose = _state.value.choosing ?: return
+        listener.cancel()
+        _state.update { it.copy(choosing = null) }
+        viewModelScope.launch { finish(Changes.applyTo(choose.change, entry, ZonedDateTime.now()), null) }
+    }
+
+    private suspend fun finish(outcome: Changes.Outcome, transcript: String?) {
+        when (outcome) {
             is Changes.Outcome.Save -> {
                 withContext(Dispatchers.IO) { dataRepository.saveDataPoint(outcome.entry.toDataPoint()) }
                 lastSavedId = outcome.entry.id
@@ -403,7 +424,11 @@ class VoiceViewModel @Inject constructor(
                 reply(outcome.reply)
             }
             is Changes.Outcome.Say -> reply(outcome.reply)
-            Changes.Outcome.Keep -> keepWords(request.transcript)
+            is Changes.Outcome.Choose -> {
+                _state.update { it.copy(phase = VoicePhase.IDLE, reply = outcome.question, choosing = outcome) }
+                speakThen(outcome.question) { if (_state.value.choosing == outcome) listen() }
+            }
+            Changes.Outcome.Keep -> transcript?.let { keepWords(it) } ?: reply("Okay, left as it was")
         }
     }
 

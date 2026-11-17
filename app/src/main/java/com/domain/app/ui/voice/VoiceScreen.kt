@@ -243,6 +243,16 @@ fun VoiceScreen(
                 OutlinedButton(onClick = { viewModel.confirm(false) }) { Text("No") }
             }
         }
+        state.choosing?.let { choose ->
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                choose.options.forEach { entry ->
+                    OutlinedButton(onClick = { viewModel.choose(entry) }) {
+                        Text(TIME.format(entry.time.atZone(ZoneId.systemDefault())))
+                    }
+                }
+            }
+        }
         if (state.handoff != null) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = { viewModel.handOff() }) { Text("Also add to Proton") }
