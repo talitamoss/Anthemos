@@ -1,6 +1,8 @@
 // app/src/main/java/com/domain/app/voice/RuleParser.kt
 package com.domain.app.voice
 
+import com.domain.app.calendar.Diary
+import com.domain.app.sense.PhoneQuestion
 import java.time.LocalTime
 import java.time.ZonedDateTime
 
@@ -27,8 +29,12 @@ class RuleParser(
         val command = text.replace(POLITE, "").trim()
 
         if (command in UNDO) return VoiceRequest.Undo(transcript)
+        // "remind me to call dad at five" is a reminder, not a call now.
+        Diary.parseAdd(transcript, today())?.let { return VoiceRequest.AddEvent(transcript, it) }
         call(transcript, command)?.let { return it }
         teach(transcript, command)?.let { return it }
+        Diary.parseQuestion(transcript, today())?.let { return VoiceRequest.AskDiary(transcript, it) }
+        PhoneQuestion.parse(transcript, today())?.let { return VoiceRequest.AskPhone(transcript, it) }
         Questions.parse(text, today())?.let { return VoiceRequest.Ask(transcript, it) }
 
         val note = NOTE.find(command)

@@ -42,6 +42,24 @@ sealed class VoiceRequest {
         val question: Question
     ) : VoiceRequest()
 
+    /** Something for the calendar, confirmed before it's added. */
+    data class AddEvent(
+        override val transcript: String,
+        val event: com.domain.app.calendar.Event
+    ) : VoiceRequest()
+
+    /** "What's on tomorrow?" */
+    data class AskDiary(
+        override val transcript: String,
+        val question: com.domain.app.calendar.DiaryQuestion
+    ) : VoiceRequest()
+
+    /** Screen time, last night's sleep. */
+    data class AskPhone(
+        override val transcript: String,
+        val question: com.domain.app.sense.PhoneQuestion
+    ) : VoiceRequest()
+
     /** Take back the last entry. */
     data class Undo(override val transcript: String) : VoiceRequest()
 }

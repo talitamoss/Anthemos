@@ -2,6 +2,21 @@
 package com.domain.app.ui.voice
 
 import android.Manifest
+import android.content.Context
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -100,6 +115,20 @@ fun VoiceScreen(
         if (listenRequest > 0) talk()
     }
 
+    var typing by remember { mutableStateOf("") }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val prefs = remember { context.getSharedPreferences("anthemos_prompts", Context.MODE_PRIVATE) }
+    var senseDeclined by remember { mutableStateOf(prefs.getBoolean("sense_declined", false)) }
+    // Back from Settings: check whether usage access was turned on.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshSense()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -113,11 +142,30 @@ fun VoiceScreen(
 
         UpdateBanner(Modifier.padding(top = 8.dp))
 
-        Spacer(Modifier.height(24.dp))
+        // Screen time and estimated sleep, once, until allowed or declined.
+        if (state.senseOff && !senseDeclined) {
+            Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        "Let Anthemos read screen time and estimate your sleep? It stays on the phone.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        Button(onClick = { viewModel.allowSense() }) { Text("Allow") }
+                        TextButton(onClick = {
+                            senseDeclined = true
+                            prefs.edit().putBoolean("sense_declined", true).apply()
+                        }) { Text("Not now") }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
 
         Text(
             text = state.heard.ifEmpty {
-                if (state.phase == VoicePhase.LISTENING) "Listening…" else "Tap and say what happened, ask a question, or say who to call"
+                if (state.phase == VoicePhase.LISTENING) "Listening…" else "Tap and say what happened, ask a question, add to your calendar, or say who to call"
             },
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
@@ -137,7 +185,7 @@ fun VoiceScreen(
         Spacer(Modifier.height(24.dp))
 
         val listening = state.phase == VoicePhase.LISTENING
-        Box(Modifier.size(180.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
             // A ring that breathes while the microphone is open.
             if (listening) {
                 val pulse = rememberInfiniteTransition(label = "listening")
@@ -172,13 +220,41 @@ fun VoiceScreen(
             }
         }
 
-        if (state.pendingCall != null) {
-            Spacer(Modifier.height(16.dp))
+        if (state.pendingCall != null || state.pendingEvent != null) {
+            Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { viewModel.confirm(true) }) { Text("Yes, call") }
+                Button(onClick = { viewModel.confirm(true) }) {
+                    Text(if (state.pendingCall != null) "Yes, call" else "Yes, add")
+                }
                 OutlinedButton(onClick = { viewModel.confirm(false) }) { Text("No") }
             }
         }
+        if (state.handoff != null) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { viewModel.handOff() }) { Text("Also add to Proton") }
+        }
+
+        // Typing instead of talking: the same path, answered on screen only.
+        Spacer(Modifier.height(12.dp))
+        val send = {
+            viewModel.typed(typing)
+            typing = ""
+            keyboard?.hide()
+        }
+        OutlinedTextField(
+            value = typing,
+            onValueChange = { typing = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Or type it") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { send() }),
+            trailingIcon = {
+                IconButton(onClick = { send() }, enabled = typing.isNotBlank()) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                }
+            }
+        )
 
         Spacer(Modifier.height(24.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

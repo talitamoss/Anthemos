@@ -1,6 +1,7 @@
 // app/src/main/java/com/domain/app/prompts/PromptRules.kt
 package com.domain.app.prompts
 
+import com.domain.app.calendar.Event
 import com.domain.app.voice.Entry
 import com.domain.app.voice.Item
 import java.time.Instant
@@ -16,7 +17,9 @@ data class Prompt(
     /** For a follow-up: the entry the answer adds to. */
     val entryId: String? = null,
     /** For a follow-up: what the answer fills in, "minutes" or "amount". */
-    val field: String? = null
+    val field: String? = null,
+    /** Minutes the phone already knows (estimated sleep), used if the answer gives none. */
+    val minutes: Int? = null
 )
 
 /** One time a prompt was asked, and whether it was answered. */
@@ -38,6 +41,8 @@ interface PromptHistory {
 object PromptRules {
     const val MAX_PER_DAY = 3
     const val FOLLOW_UP = "follow-up"
+    /** All prompts after events share this id for counting and stopping. */
+    const val EVENT = "event"
     val QUIET_FROM: LocalTime = LocalTime.of(21, 0)
     val QUIET_UNTIL: LocalTime = LocalTime.of(7, 0)
 
@@ -83,11 +88,22 @@ object PromptRules {
     private val SEEDS_BY_ID = SEEDS.associate { it.prompt.id to it.prompt.text }
 
     /** The prompt to ask now, if any. [entries] covers at least the last fourteen days. */
-    fun due(now: ZonedDateTime, entries: List<Entry>, history: PromptHistory): Prompt? {
+    fun due(now: ZonedDateTime, entries: List<Entry>, history: PromptHistory, events: List<Event> = emptyList()): Prompt? {
         val time = now.toLocalTime()
         if (quiet(time)) return null
         val midnight = now.truncatedTo(ChronoUnit.DAYS).toInstant()
-        if (SEEDS.sumOf { s -> history.asks(s.prompt.id).count { it.time >= midnight } } >= MAX_PER_DAY) return null
+        val askedToday = (SEEDS.map { it.prompt.id } + EVENT).sumOf { id -> history.asks(id).count { it.time >= midnight } }
+        if (askedToday >= MAX_PER_DAY) return null
+
+        // "How was the dentist?" within three hours of it ending.
+        if (!history.stopped(EVENT)) {
+            events.filter { e ->
+                !e.reminder && !e.allDay && e.end <= now.toInstant() && e.end > now.toInstant().minus(3, ChronoUnit.HOURS) &&
+                    history.asks("$EVENT:${e.id}").isEmpty()
+            }.minByOrNull { it.end }?.let { e ->
+                return Prompt("$EVENT:${e.id}", "How was ${e.title.replaceFirstChar { it.lowercase() }}?", "event")
+            }
+        }
 
         val today = entries.filter { it.time >= midnight }
         val fortnight = entries.filter { it.time >= midnight.minus(14, ChronoUnit.DAYS) && it.time < midnight }

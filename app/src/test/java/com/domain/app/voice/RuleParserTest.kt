@@ -89,6 +89,14 @@ class RuleParserTest {
     }
 
     @Test
+    fun `calendar before calls and questions`() {
+        assertTrue(parser.parse("remind me to call dad at five") is VoiceRequest.AddEvent)
+        assertTrue(parser.parse("what's on tomorrow") is VoiceRequest.AskDiary)
+        assertTrue(parser.parse("how much screen time today") is VoiceRequest.AskPhone)
+        assertTrue(parser.parse("I had a coffee") is VoiceRequest.Record)
+    }
+
+    @Test
     fun `undo and questions are not entries`() {
         assertTrue(parser.parse("Undo") is VoiceRequest.Undo)
         assertTrue(parser.parse("when did I last call dad") is VoiceRequest.Ask)

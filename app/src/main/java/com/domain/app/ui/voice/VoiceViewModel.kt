@@ -10,7 +10,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.core.data.DataRepository
+import com.domain.app.calendar.Diary
+import com.domain.app.calendar.Event
+import com.domain.app.calendar.Reminders
 import com.domain.app.prompts.Prompt
+import com.domain.app.sense.PhoneAnswers
+import com.domain.app.sense.PhoneQuestion
+import com.domain.app.sense.PhoneSense
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.prompts.PromptLog
 import com.domain.app.prompts.PromptRules
@@ -57,7 +63,13 @@ data class VoiceUiState(
     /** A word ("dad") waiting to be told which contact it means. */
     val pendingName: String? = null,
     /** A prompt or follow-up waiting for its answer. */
-    val prompt: Prompt? = null
+    val prompt: Prompt? = null,
+    /** An event waiting for yes or no. */
+    val pendingEvent: Event? = null,
+    /** An event just added, which can be handed to Proton. */
+    val handoff: Event? = null,
+    /** True when the screen can't be read: the phone's usage access is off. */
+    val senseOff: Boolean = false
 )
 
 data class PendingCall(val match: Contacts.Match, val said: String)
@@ -79,6 +91,9 @@ class VoiceViewModel @Inject constructor(
     private val reader = RuleReader()
     private val contacts = Contacts(context)
     private val promptLog = PromptLog(context)
+    private val sense = PhoneSense(context)
+    /** Whether this turn was spoken: typed turns aren't answered aloud. */
+    private var voice = true
     private var lastSavedId: String? = null
 
     private val _state = MutableStateFlow(VoiceUiState())
@@ -94,22 +109,33 @@ class VoiceViewModel @Inject constructor(
 
     init {
         listener.prepare()
+        refreshSense()
     }
 
     fun listen() {
+        // A reminder like "Call Dad" was tapped: act on it as if said.
+        PromptInbox.takeSay()?.let { words ->
+            voice = true
+            _state.update { it.copy(heard = words, handoff = null) }
+            handle(words)
+            return
+        }
         speaker.say("") // stop anything being spoken
         // Opened from a prompt notification: show its question while listening.
         val prompt = PromptInbox.take() ?: _state.value.prompt
-        _state.update { it.copy(phase = VoicePhase.LISTENING, heard = "", reply = prompt?.text.orEmpty(), prompt = prompt) }
+        _state.update {
+            it.copy(phase = VoicePhase.LISTENING, heard = "", reply = prompt?.text.orEmpty(), prompt = prompt, handoff = null)
+        }
         listener.start(object : Listener.Callbacks {
             override fun onListening() = Unit
             override fun onPartial(text: String) = _state.update { it.copy(heard = text) }
             override fun onHeard(text: String) {
+                voice = true
                 _state.update { it.copy(heard = text) }
                 handle(text)
             }
             override fun onError(message: String) {
-                _state.update { it.copy(phase = phaseFor(it.pendingCall), reply = message, pendingName = null, prompt = null) }
+                _state.update { it.copy(phase = phaseFor(it), reply = message, pendingName = null, prompt = null) }
             }
         })
     }
@@ -117,16 +143,52 @@ class VoiceViewModel @Inject constructor(
     /** Stop tapped: act on what was heard so far. */
     fun stopListening() = listener.finish()
 
-    /** Yes or no to a pending call, by tap. */
-    fun confirm(yes: Boolean) {
-        val call = _state.value.pendingCall ?: return
+    /** Typed instead of spoken: the same path, answered in words only. */
+    fun typed(text: String) {
+        if (text.isBlank()) return
         listener.cancel()
+        voice = false
+        _state.update { it.copy(phase = phaseFor(it), heard = text.trim(), handoff = null) }
+        handle(text.trim())
+    }
+
+    /** Yes or no to a pending call or event, by tap. */
+    fun confirm(yes: Boolean) {
+        listener.cancel()
+        _state.value.pendingEvent?.let { event ->
+            if (yes) viewModelScope.launch { addEvent(event) } else reply("Okay, not added", pendingEvent = null)
+            return
+        }
+        val call = _state.value.pendingCall ?: return
         if (yes) dial(call) else reply("Okay, not calling", pendingCall = null)
     }
+
+    /** Copies the event just added into Proton (or whichever calendar app takes it). */
+    fun handOff() {
+        val event = _state.value.handoff ?: return
+        _state.update { it.copy(handoff = null) }
+        if (!Reminders.handOff(context, event)) reply("No calendar app on the phone took it")
+    }
+
+    fun allowSense() {
+        context.startActivity(sense.settings())
+    }
+
+    fun refreshSense() = _state.update { it.copy(senseOff = !sense.allowed()) }
 
     fun undo() = viewModelScope.launch { undoLast() }
 
     private fun handle(text: String) {
+        _state.value.pendingEvent?.let { event ->
+            val lower = text.lowercase()
+            when {
+                NO.any { Regex("\\b$it\\b").containsMatchIn(lower) } -> reply("Okay, not added", pendingEvent = null)
+                YES.any { Regex("\\b$it\\b").containsMatchIn(lower) } || lower.contains("add") ->
+                    viewModelScope.launch { addEvent(event) }
+                else -> confirmEvent(event)
+            }
+            return
+        }
         _state.value.pendingCall?.let { call ->
             val lower = text.lowercase()
             // No before yes: "don't call" contains "call".
@@ -158,11 +220,72 @@ class VoiceViewModel @Inject constructor(
             is VoiceRequest.Call -> viewModelScope.launch { prepareCall(request) }
             is VoiceRequest.Teach -> viewModelScope.launch { teach(request) }
             is VoiceRequest.Ask -> viewModelScope.launch { answer(request) }
+            is VoiceRequest.AddEvent -> confirmEvent(request.event)
+            is VoiceRequest.AskDiary -> viewModelScope.launch {
+                reply(Diary.answer(request.question, events(), ZonedDateTime.now()))
+            }
+            is VoiceRequest.AskPhone -> answerPhone(request.question)
         }
     }
 
+    private suspend fun events(): List<Event> = withContext(Dispatchers.IO) {
+        dataRepository.getPluginData(Event.PLUGIN_ID).first().mapNotNull(Event::from)
+    }
+
+    /** "Add Dentist, Thursday 20 November at 3:00 pm?" */
+    private fun confirmEvent(event: Event) {
+        val now = ZonedDateTime.now()
+        val question = if (event.reminder) {
+            "Remind you: ${event.title}, ${Diary.dayAndTime(event, now)}?"
+        } else {
+            "Add ${Diary.describe(event, now)}?"
+        }
+        _state.update { it.copy(phase = VoicePhase.CONFIRMING, reply = question, pendingEvent = event) }
+        speakThen(question) { if (_state.value.pendingEvent == event) listen() }
+    }
+
+    private suspend fun addEvent(event: Event) {
+        withContext(Dispatchers.IO) { dataRepository.saveDataPoint(event.toDataPoint()) }
+        Reminders.schedule(context, event)
+        val now = ZonedDateTime.now()
+        if (event.reminder) {
+            reply("I'll remind you ${Diary.dayAndTime(event, now)}", pendingEvent = null)
+        } else {
+            reply("Added ${Diary.describe(event, now)}", pendingEvent = null)
+            _state.update { it.copy(handoff = event) }
+        }
+    }
+
+    private fun answerPhone(question: PhoneQuestion) {
+        if (!sense.allowed()) {
+            _state.update { it.copy(senseOff = true) }
+            reply("I can't see that yet. Tap Allow to let Anthemos read screen time.")
+            return
+        }
+        val now = ZonedDateTime.now()
+        reply(
+            when (question) {
+                is PhoneQuestion.ScreenTime -> PhoneAnswers.screenTime(
+                    question.phrase,
+                    sense.screenMinutes(question.from, question.until),
+                    sense.topApps(question.from, question.until)
+                )
+                PhoneQuestion.Slept -> PhoneAnswers.slept(sense.lastNight(now), now)
+            }
+        )
+    }
+
+    /** Speaks [text] on a spoken turn, then runs [then]; on a typed turn, just shows it. */
+    private fun speakThen(text: String, then: () -> Unit) {
+        if (!voice) return
+        speaker.say(text) { viewModelScope.launch(Dispatchers.Main) { then() } }
+    }
+
     private suspend fun save(words: String, items: List<Item>, replyText: String?, prompt: String? = null): Entry {
-        val entry = Entry(UUID.randomUUID().toString(), Instant.now(), words, items, RuleReader.NAME, prompt)
+        val entry = Entry(
+            UUID.randomUUID().toString(), Instant.now(), words, items, RuleReader.NAME, prompt,
+            source = if (voice) "voice" else "typed"
+        )
         withContext(Dispatchers.IO) { dataRepository.saveDataPoint(entry.toDataPoint()) }
         lastSavedId = entry.id
         replyText?.let { reply(it) }
@@ -178,11 +301,7 @@ class VoiceViewModel @Inject constructor(
         }
         val question = "$said. ${next.text}"
         _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, prompt = next) }
-        speaker.say(question) {
-            viewModelScope.launch(Dispatchers.Main) {
-                if (_state.value.prompt == next) listen()
-            }
-        }
+        speakThen(question) { if (_state.value.prompt == next) listen() }
     }
 
     /** An answer to a prompt or a follow-up. */
@@ -192,7 +311,11 @@ class VoiceViewModel @Inject constructor(
             return
         }
         promptLog.answered(prompt.id)
-        val items = reader.read(text, prompt.context)
+        if (prompt.id.startsWith("${PromptRules.EVENT}:")) promptLog.answered(PromptRules.EVENT)
+        // Hours the phone saw, when the answer gives none.
+        val items = reader.read(text, prompt.context).map { item ->
+            if (item.kind == "sleep" && item.minutes == null && prompt.minutes != null) item.copy(minutes = prompt.minutes) else item
+        }
         val entry = save(text, items, null, prompt = prompt.text)
         followUpOr(entry, if (items.isEmpty()) "Kept" else reader.reply(items))
     }
@@ -262,11 +385,7 @@ class VoiceViewModel @Inject constructor(
         val key = word.lowercase()
         val question = "I don't know who $word is. Say their name as it is in your contacts."
         _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, pendingName = key) }
-        speaker.say(question) {
-            viewModelScope.launch(Dispatchers.Main) {
-                if (_state.value.pendingName == key) listen()
-            }
-        }
+        speakThen(question) { if (_state.value.pendingName == key) listen() }
     }
 
     private suspend fun learnName(word: String, said: String) {
@@ -303,11 +422,7 @@ class VoiceViewModel @Inject constructor(
     /** Asks a yes/no question about [call], then listens for the answer. */
     private fun ask(question: String, call: PendingCall) {
         _state.update { it.copy(phase = VoicePhase.CONFIRMING, reply = question, pendingCall = call) }
-        speaker.say(question) {
-            viewModelScope.launch(Dispatchers.Main) {
-                if (_state.value.pendingCall == call) listen()
-            }
-        }
+        speakThen(question) { if (_state.value.pendingCall == call) listen() }
     }
 
     private fun dial(call: PendingCall) {
@@ -324,12 +439,20 @@ class VoiceViewModel @Inject constructor(
         context.startActivity(intent)
     }
 
-    private fun reply(text: String, pendingCall: PendingCall? = _state.value.pendingCall) {
-        _state.update { it.copy(phase = phaseFor(pendingCall), reply = text, pendingCall = pendingCall) }
-        speaker.say(text)
+    private fun reply(
+        text: String,
+        pendingCall: PendingCall? = _state.value.pendingCall,
+        pendingEvent: Event? = _state.value.pendingEvent
+    ) {
+        _state.update {
+            val next = it.copy(reply = text, pendingCall = pendingCall, pendingEvent = pendingEvent)
+            next.copy(phase = phaseFor(next))
+        }
+        if (voice) speaker.say(text)
     }
 
-    private fun phaseFor(call: PendingCall?) = if (call != null) VoicePhase.CONFIRMING else VoicePhase.IDLE
+    private fun phaseFor(s: VoiceUiState) =
+        if (s.pendingCall != null || s.pendingEvent != null) VoicePhase.CONFIRMING else VoicePhase.IDLE
 
     private fun granted(permission: String) =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED

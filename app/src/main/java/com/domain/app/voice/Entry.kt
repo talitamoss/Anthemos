@@ -22,7 +22,9 @@ data class Entry(
     /** Which reader produced [items], so old readings can be redone. */
     val reader: String,
     /** The prompt this answered ("How did you sleep?"), if any. */
-    val prompt: String? = null
+    val prompt: String? = null,
+    /** "voice" or "typed" for what the person said; "phone" for what the phone noticed. */
+    val source: String = "voice"
 ) {
     fun toDataPoint(): DataPoint = DataPoint(
         id = id,
@@ -35,8 +37,8 @@ data class Entry(
             put("reader", reader)
             prompt?.let { put("prompt", it) }
         },
-        metadata = mapOf("inputType" to "voice"),
-        source = "voice"
+        metadata = mapOf("inputType" to source),
+        source = source
     )
 
     companion object {
@@ -52,7 +54,8 @@ data class Entry(
                 words = point.value["words"]?.toString().orEmpty(),
                 items = items,
                 reader = point.value["reader"]?.toString().orEmpty(),
-                prompt = point.value["prompt"]?.toString()
+                prompt = point.value["prompt"]?.toString(),
+                source = point.source ?: "voice"
             )
         }
     }

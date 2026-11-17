@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
     private fun noteListen(intent: Intent?) {
         if (intent?.action !in LISTEN_ACTIONS) return
         // Opened from a prompt: Speak asks it and listens for the answer.
-        PromptInbox.fromIntent(intent)?.let { PromptInbox.waiting.value = it }
+        PromptInbox.receive(intent)
         listenRequest += 1
     }
 

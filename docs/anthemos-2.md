@@ -47,6 +47,16 @@ Anthemos asks about **gaps, not a script** (`prompts/PromptRules.kt`). A prompt 
 - **One follow-up per entry** when an obvious detail is missing: how long a walk was, how many hours of sleep, how much something bought cost. The answer fills in that entry.
 - Later, the reader on the person's own server words prompts and follow-ups from context ("the bus was late again, third time this week").
 
+## Calendar
+
+Proton Calendar is end-to-end encrypted and doesn't share its events with Android's calendar store, so no other app can read or add to it. Anthemos keeps **its own calendar in its encrypted store** (`calendar/`), and hands each event to Proton with one tap ("Also add to Proton", Android's standard new-event request; it works if Proton accepts it).
+
+- **Add by voice or typing:** "add dentist Thursday at three", "put lunch with Sam tomorrow at half past twelve at the bakery", "I've got the market on the twenty-first". Confirmed before saving.
+- **Reminders:** "remind me to call Dad at five", "in twenty minutes". Anthemos sets off its own alarm and notification (exact alarms, set again after a restart). A "call" reminder opens Anthemos ready to make the call.
+- **Questions:** "What's on tomorrow?", "When's the dentist?", "Am I free Friday afternoon?"
+- **After events:** "How was the dentist?" within three hours of the end, as a prompt (same limits; "Stop asking this" stops them all).
+- Later: sync to the person's own server (CalDAV), which Proton can subscribe to.
+
 ## Pieces
 
 1. **Ears.** Anthemos registers as the phone's default assistant (`VoiceInteractionService`), so a headset or steering-wheel button opens it. Push to talk first; a wake word is optional later. Speech becomes text on the phone (Whisper via whisper.cpp, or Android's on-device recogniser).
@@ -93,9 +103,11 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 **alpha 4:** prompts and follow-ups (above); money ("fifteen dollars fifty", "$12") and "How much have I spent this week?".
 
-**Next: what the phone already knows** (opt-in, each one separately):
-- **Screen time:** daily totals and per app, from Android's usage stats (special access in Settings).
-- **Sleep, estimated:** last phone use at night to first in the morning, from the same usage stats; the morning prompt then asks "In bed about 11, up at 6:40, how was it?"
+**alpha 5:** calendar (above); **typing** as well as talking (the same path; typed turns are answered on screen, not aloud); **screen time and estimated sleep** (below, the first two).
+
+**What the phone already knows** (opt-in, each one separately):
+- **Screen time** (alpha 5, `sense/PhoneSense.kt`): from Android's usage access, turned on in Settings from a card on Speak. "How much screen time today?" answers with the total and the top three apps; each morning yesterday's total is kept as an entry (source "phone").
+- **Sleep, estimated** (alpha 5): the longest gap in phone use overnight (6 pm to 1 pm, three hours or more; glances under five minutes ignored). The morning prompt says "Phone down at 11:10 pm, up at 6:40 am. How did you sleep?" and keeps those hours if the answer gives none. "How long did I sleep?" answers from it.
 - **Location:** places rather than raw tracks: home, work, "a new place", time spent, from the phone's own location (GrapheneOS has its own network location). OsmAnd tracks for walks and rides.
 - **Steps:** the phone's step counter sensor, no Google Fit.
 

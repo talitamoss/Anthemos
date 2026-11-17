@@ -19,6 +19,13 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Anthemos 2.0: prompts about the day (prompts/Prompter.kt) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Anthemos 2.0: its own reminders (calendar/Reminders.kt), set again after a restart -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Anthemos 2.0: screen time and estimated sleep, only once allowed in Settings (sense/PhoneSense.kt) -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- Package visibility (Android 11+) for text-to-speech -->
     <queries>
@@ -61,6 +68,13 @@
 
         <receiver android:name=".update.UpdateReceiver" android:exported="false" />
         <receiver android:name=".prompts.PromptActionReceiver" android:exported="false" />
+        <receiver android:name=".calendar.ReminderReceiver" android:exported="false" />
+        <receiver android:name=".calendar.RemindersOnBoot" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
 	<!-- Disable default WorkManager initialization since we're using on-demand initialization -->
 <provider
