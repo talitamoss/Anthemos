@@ -110,6 +110,8 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 **alpha 7:** changes ask which one when several of today's entries fit. The own-server and shared-server reader is parked for now (Tal, 2026-11-17); the rules keep growing meanwhile.
 
+**alpha 8:** a waiting prompt or follow-up lasts three minutes, and only something to keep answers it; a follow-up answer that holds its own things ("I had a coffee") is a new entry, not added to the old one. "A coffee with lunch" is the coffee, not lunch as well.
+
 **What the phone already knows** (opt-in, each one separately):
 - **Screen time** (alpha 5, `sense/PhoneSense.kt`): from Android's usage access, turned on in Settings from a card on Speak. Android greys out the switch for apps installed outside a store until App info, ⋮, Allow restricted settings; the card says so after the first try, with an App info button. "How much screen time today?" answers with the total and the top three apps; each morning yesterday's total is kept as an entry (source "phone").
 - **Sleep, estimated** (alpha 5): the longest gap in phone use overnight (6 pm to 1 pm, three hours or more; glances under five minutes ignored). The morning prompt says "Phone down at 11:10 pm, up at 6:40 am. How did you sleep?" and keeps those hours if the answer gives none. "How long did I sleep?" answers from it.

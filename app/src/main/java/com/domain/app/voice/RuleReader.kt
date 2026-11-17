@@ -61,8 +61,9 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
                 food = true
             }
         }
-        // "I just had lunch": a meal with nothing else said.
-        if (meal != null && context == null && items.none { it.kind == "food" }) {
+        // "I just had lunch": a meal with nothing else said. Not "a coffee with lunch".
+        val mealIsWhen = meal != null && items.isNotEmpty() && Regex("\\b(?:for|with|at|during|after|before)\\s+$meal\\b").containsMatchIn(text)
+        if (meal != null && context == null && items.none { it.kind == "food" } && !mealIsWhen) {
             items.add(0, Item("food", meal, meal = meal))
         }
         return items

@@ -31,6 +31,13 @@ class RuleParserTest {
     }
 
     @Test
+    fun `a drink with a meal is the drink`() {
+        assertEquals(listOf("coffee"), labels("I had a coffee with lunch"))
+        assertEquals(listOf("coffee"), labels("I had coffee for lunch"))
+        assertEquals(listOf("lunch", "coffee"), labels("I had lunch and a coffee"))
+    }
+
+    @Test
     fun `tea as a meal is not a drink`() {
         val r = record("we had pasta for tea")
         assertEquals(listOf("pasta"), r.items.map { it.label })

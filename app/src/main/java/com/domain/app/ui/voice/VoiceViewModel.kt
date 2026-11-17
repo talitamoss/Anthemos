@@ -100,6 +100,8 @@ class VoiceViewModel @Inject constructor(
     /** Whether this turn was spoken: typed turns aren't answered aloud. */
     private var voice = true
     private var lastSavedId: String? = null
+    /** When the waiting prompt was asked: an old one is dropped, not answered by whatever is said next. */
+    private var promptAt: Instant = Instant.EPOCH
 
     private val _state = MutableStateFlow(VoiceUiState())
     val state: StateFlow<VoiceUiState> = _state.asStateFlow()
@@ -127,7 +129,7 @@ class VoiceViewModel @Inject constructor(
         }
         speaker.say("") // stop anything being spoken
         // Opened from a prompt notification: show its question while listening.
-        val prompt = PromptInbox.take() ?: _state.value.prompt
+        val prompt = PromptInbox.take()?.also { promptAt = Instant.now() } ?: freshPrompt()
         _state.update {
             it.copy(phase = VoicePhase.LISTENING, heard = "", reply = prompt?.text.orEmpty(), prompt = prompt, handoff = null, canUndo = false)
         }
@@ -228,13 +230,16 @@ class VoiceViewModel @Inject constructor(
             return
         }
 
-        _state.value.prompt?.let { prompt ->
-            _state.update { it.copy(prompt = null) }
-            viewModelScope.launch { answer(prompt, text) }
+        val request = parser.parse(text)
+        val prompt = freshPrompt()
+        _state.update { it.copy(prompt = null) }
+        // Only something to keep answers a prompt: "call dad" or a question is still that.
+        if (prompt != null && request is VoiceRequest.Record) {
+            viewModelScope.launch { answer(prompt, request) }
             return
         }
 
-        when (val request = parser.parse(text)) {
+        when (request) {
             is VoiceRequest.Record -> viewModelScope.launch {
                 val entry = save(request.transcript, request.items, null)
                 followUpOr(entry, request.reply)
@@ -325,14 +330,22 @@ class VoiceViewModel @Inject constructor(
             return
         }
         val question = "$said. ${next.text}"
+        promptAt = Instant.now()
         _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, prompt = next) }
         speakThen(question) { if (_state.value.prompt == next) listen() }
     }
 
+    /** The waiting prompt, if it was asked in the last few minutes. */
+    private fun freshPrompt(): Prompt? =
+        _state.value.prompt?.takeIf { Instant.now().isBefore(promptAt.plusSeconds(PROMPT_MINUTES * 60)) }
+
     /** An answer to a prompt or a follow-up. */
-    private suspend fun answer(prompt: Prompt, text: String) {
+    private suspend fun answer(prompt: Prompt, request: VoiceRequest.Record) {
+        val text = request.transcript
         if (prompt.entryId != null) {
-            addTo(prompt, text)
+            // "Forty minutes" fills in the walk; "I had a coffee" is something new.
+            val ownThings = request.items.any { it.kind != "spend" }
+            if (ownThings || !addTo(prompt, text)) followUpOr(save(text, request.items, null), request.reply)
             return
         }
         promptLog.answered(prompt.id)
@@ -345,15 +358,15 @@ class VoiceViewModel @Inject constructor(
         followUpOr(entry, if (items.isEmpty()) "Kept" else reader.reply(items))
     }
 
-    /** A follow-up answer fills in the detail on the entry it was about. */
-    private suspend fun addTo(prompt: Prompt, answer: String) {
+    /**
+     * A follow-up answer fills in the detail on the entry it was about.
+     * False when the answer doesn't hold that detail, so it's kept on its own.
+     */
+    private suspend fun addTo(prompt: Prompt, answer: String): Boolean {
         val entry = withContext(Dispatchers.IO) { dataRepository.getDataPoint(prompt.entryId!!) }?.let(Entry::from)
-        if (entry == null) {
-            reply("Noted")
-            return
-        }
+            ?: return false
         val items = entry.items.toMutableList()
-        var said = "Noted"
+        var said: String? = null
         when (prompt.field) {
             "minutes" -> {
                 val i = items.indexOfFirst { (it.kind == "activity" || it.kind == "sleep") && it.minutes == null }
@@ -368,9 +381,11 @@ class VoiceViewModel @Inject constructor(
                 said = "Added, ${it.label}"
             }
         }
+        if (said == null) return false
         val updated = entry.copy(words = entry.words.trimEnd('.', ' ') + ". " + answer, items = items)
         withContext(Dispatchers.IO) { dataRepository.saveDataPoint(updated.toDataPoint()) }
         reply(said)
+        return true
     }
 
     private suspend fun answer(request: VoiceRequest.Ask) {
@@ -529,6 +544,7 @@ class VoiceViewModel @Inject constructor(
     }
 
     companion object {
+        private const val PROMPT_MINUTES = 3L
         private val YES = listOf("yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do it", "go ahead", "call", "please")
         private val NO = listOf("no", "nope", "nah", "cancel", "don't", "stop", "never mind")
     }
