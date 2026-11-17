@@ -15,7 +15,14 @@ sealed class VoiceRequest {
         override val transcript: String,
         val items: List<Item>,
         /** What Anthemos says back, e.g. "Logged salad and coffee". */
-        val reply: String
+        val reply: String,
+        /** When it happened, if said ("at 8 am"); null for now. */
+        val at: java.time.ZonedDateTime? = null,
+        /**
+         * Parts said with different times ("woke up at 5:30, having a
+         * coffee now"), each kept as its own entry. Empty for one entry.
+         */
+        val parts: List<Record> = emptyList()
     ) : VoiceRequest()
 
     /**

@@ -92,23 +92,37 @@ class Listener(private val context: Context) {
         model = null
     }
 
-    /** One turn of listening. Stale callbacks from an old turn are ignored. */
+    /**
+     * One turn of listening. Vosk reports each stretch of speech when it hears
+     * a short pause; the turn goes on through those, like talking to a
+     * person, and ends after a longer quiet ([QUIET_MS]) or a tap on Stop.
+     * Stale callbacks from an old turn are ignored.
+     */
     private inner class Session(model: Model, private val callbacks: Callbacks) : RecognitionListener {
         private val recognizer = Recognizer(model, SAMPLE_RATE)
         private val service = SpeechService(recognizer, SAMPLE_RATE)
         private var done = false
+        private val said = mutableListOf<String>()
+        private val quiet = Runnable { finish() }
+        // Nothing said at all: don't hold the microphone open for a minute.
+        private val silent = Runnable { finish() }
 
         fun begin() {
             service.startListening(this, TIMEOUT_MS)
+            main.postDelayed(silent, SILENT_MS)
             callbacks.onListening()
         }
 
         fun finish() {
+            main.removeCallbacks(quiet)
+            main.removeCallbacks(silent)
             if (!done) service.stop() // onFinalResult follows
         }
 
         fun release() {
             done = true
+            main.removeCallbacks(quiet)
+            main.removeCallbacks(silent)
             service.cancel()
             service.shutdown()
             recognizer.close()
@@ -117,19 +131,28 @@ class Listener(private val context: Context) {
 
         override fun onPartialResult(hypothesis: String?) {
             if (done) return
-            text(hypothesis, "partial")?.let(callbacks::onPartial)
+            val partial = text(hypothesis, "partial") ?: return
+            // Talking again: not the end yet.
+            main.removeCallbacks(silent)
+            main.removeCallbacks(quiet)
+            callbacks.onPartial((said + partial).joinToString(" "))
         }
 
-        // Vosk calls this when it hears a pause: the end of what was said.
+        // Vosk calls this at each short pause: keep it, and wait to see if more comes.
         override fun onResult(hypothesis: String?) {
             if (done) return
-            text(hypothesis, "text")?.let { heard(it) }
+            text(hypothesis, "text")?.let { said += it }
+            if (said.isNotEmpty()) {
+                callbacks.onPartial(said.joinToString(" "))
+                main.removeCallbacks(quiet)
+                main.postDelayed(quiet, QUIET_MS)
+            }
         }
 
         override fun onFinalResult(hypothesis: String?) {
             if (done) return
-            val text = text(hypothesis, "text")
-            if (text != null) heard(text) else fail("I didn't catch that")
+            text(hypothesis, "text")?.let { said += it }
+            if (said.isNotEmpty()) heard(said.joinToString(" ")) else fail("I didn't catch that")
         }
 
         override fun onError(exception: Exception?) {
@@ -137,7 +160,8 @@ class Listener(private val context: Context) {
         }
 
         override fun onTimeout() {
-            if (!done) fail("I didn't catch that")
+            if (done) return
+            if (said.isNotEmpty()) heard(said.joinToString(" ")) else fail("I didn't catch that")
         }
 
         private fun heard(text: String) {
@@ -178,7 +202,11 @@ class Listener(private val context: Context) {
 
     companion object {
         private const val SAMPLE_RATE = 16000f
-        private const val TIMEOUT_MS = 15_000
+        /** The longest one turn can run. */
+        private const val TIMEOUT_MS = 60_000
+        /** Quiet after speech that ends the turn, on top of Vosk's own short pause. */
+        private const val QUIET_MS = 1_800L
+        private const val SILENT_MS = 8_000L
         /** Fetched at build time by the fetchVoskModel task in app/build.gradle.kts. */
         private const val MODEL_ASSET = "model-en-us"
         private const val MODEL_NAME = "vosk-model-small-en-us-0.15"

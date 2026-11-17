@@ -2,6 +2,7 @@
 package com.domain.app.voice
 
 import com.domain.app.calendar.Diary
+import com.domain.app.calendar.When
 import com.domain.app.sense.PhoneQuestion
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -38,9 +39,52 @@ class RuleParser(
         PhoneQuestion.parse(transcript, today())?.let { return VoiceRequest.AskPhone(transcript, it) }
         Questions.parse(text, today())?.let { return VoiceRequest.Ask(transcript, it) }
 
-        val note = NOTE.find(command)
-        val items = if (note != null) emptyList() else reader.read(transcript)
-        return VoiceRequest.Record(transcript, items, reader.reply(items))
+        if (NOTE.find(command) != null) return VoiceRequest.Record(transcript, emptyList(), "Noted")
+        return record(transcript)
+    }
+
+    /**
+     * Something to keep, at the time said ("a coffee at about 8 am"). Where
+     * parts carry different times ("woke up at 5:30, having a coffee now"),
+     * each is its own entry: a time covers its own part and the untimed
+     * parts just before it; parts after the last time happened now.
+     */
+    private fun record(transcript: String): VoiceRequest.Record {
+        val now = today()
+        val seps = SPLIT.findAll(transcript).toList()
+        val starts = listOf(0) + seps.map { it.range.last + 1 }
+        val ends = seps.map { it.range.first } + transcript.length
+        val clauses = starts.indices.map { transcript.substring(starts[it], ends[it]) }
+        val times = clauses.map { When.past(it, now) }
+
+        val groups = mutableListOf<IntRange>()
+        var from = 0
+        times.forEachIndexed { i, past ->
+            if (past != null) {
+                groups += from..i
+                from = i + 1
+            }
+        }
+        if (from < clauses.size) groups += from until clauses.size
+
+        val parts = groups.map { g ->
+            val at = times[g.last]?.at
+            val words = transcript.substring(starts[g.first], ends[g.last]).trim().trim(',').trim()
+            val readable = g.joinToString(", ") { i -> times[i]?.rest ?: clauses[i] }
+            val items = RuleReader { at?.toLocalTime() ?: now() }.read(readable)
+            VoiceRequest.Record(words, items, said(items, at, now), at)
+        }
+        if (parts.size == 1) return parts[0].copy(transcript = transcript)
+        val reply = "Logged " + parts.joinToString("; ") { it.reply.removePrefix("Logged ") }
+        return VoiceRequest.Record(transcript, parts.flatMap { it.items }, reply, parts.last().at, parts)
+    }
+
+    /** "Logged coffee at 8:00 am". */
+    private fun said(items: List<Item>, at: ZonedDateTime?, now: ZonedDateTime): String {
+        val what = if (items.isEmpty()) "Noted" else reader.reply(items)
+        at ?: return what
+        val day = if (at.toLocalDate() == now.toLocalDate()) "" else if (at.toLocalDate() == now.toLocalDate().minusDays(1)) " yesterday" else " on ${at.dayOfWeek.name.lowercase()}"
+        return "$what at ${CLOCK.format(at).lowercase()}$day"
     }
 
     private fun call(transcript: String, text: String): VoiceRequest.Call? {
@@ -75,6 +119,8 @@ class RuleParser(
             "brother|sister|partner|wife|husband|boyfriend|girlfriend|son|daughter|aunt|auntie|uncle|cousin|boss|doctor"
         private val TEACH = Regex("^(?:my\\s+)?($RELATIONS)(?:'s name is|'s called| is called| is named| is)\\s+(.+)$")
 
+        private val SPLIT = Regex("\\s*(?:[,;]|\\band then\\b|\\band\\b|\\bthen\\b|\\balso\\b|\\bplus\\b)\\s*", RegexOption.IGNORE_CASE)
+        private val CLOCK = java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH)
         private val NOTE = Regex("^(?:take a note|make a note|note that|note|remember that|remember)\\b")
     }
 }

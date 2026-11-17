@@ -38,6 +38,37 @@ class RuleParserTest {
     }
 
     @Test
+    fun `a time said is when it happened`() {
+        val r = record("I had a coffee early this morning at about 8 am")
+        assertEquals(listOf("coffee"), r.items.map { it.label })
+        assertEquals(LocalTime.of(8, 0), r.at?.toLocalTime())
+        assertEquals("Logged coffee at 8:00 am", r.reply)
+        // Seven, said at one in the afternoon, is the morning.
+        assertEquals(LocalTime.of(7, 0), record("had toast at seven").at?.toLocalTime())
+        assertEquals(listOf("toast"), labels("had toast at seven"))
+        assertEquals(null, record("I got about 8 hours sleep").at)
+    }
+
+    @Test
+    fun `parts with different times are separate`() {
+        val r = record("hi I've woken up, I woke up at five thirty am, I got about 8 hours sleep and I'm having a coffee now")
+        assertEquals(2, r.parts.size)
+        assertEquals("hi I've woken up, I woke up at five thirty am", r.parts[0].transcript)
+        assertEquals(LocalTime.of(5, 30), r.parts[0].at?.toLocalTime())
+        assertEquals(listOf("wake", "wake"), r.parts[0].items.map { it.kind })
+        assertEquals(listOf("sleep", "coffee"), r.parts[1].items.map { it.label })
+        assertEquals(480, r.parts[1].items[0].minutes)
+        assertEquals(null, r.parts[1].at)
+    }
+
+    @Test
+    fun `waking and bed`() {
+        val r = record("hi I've woken up, I got about 8 hours sleep and I'm having a coffee now")
+        assertEquals(listOf("woke up", "sleep", "coffee"), r.items.map { it.label })
+        assertEquals(listOf("went to bed"), labels("went to sleep about eleven"))
+    }
+
+    @Test
     fun `tea as a meal is not a drink`() {
         val r = record("we had pasta for tea")
         assertEquals(listOf("pasta"), r.items.map { it.label })

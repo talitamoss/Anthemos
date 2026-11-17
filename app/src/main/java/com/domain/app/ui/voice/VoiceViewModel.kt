@@ -100,6 +100,8 @@ class VoiceViewModel @Inject constructor(
     /** Whether this turn was spoken: typed turns aren't answered aloud. */
     private var voice = true
     private var lastSavedId: String? = null
+    /** Everything kept from the last thing said, so Undo takes back all of it. */
+    private var lastTurn: List<String> = emptyList()
     /** When the waiting prompt was asked: an old one is dropped, not answered by whatever is said next. */
     private var promptAt: Instant = Instant.EPOCH
 
@@ -240,10 +242,7 @@ class VoiceViewModel @Inject constructor(
         }
 
         when (request) {
-            is VoiceRequest.Record -> viewModelScope.launch {
-                val entry = save(request.transcript, request.items, null)
-                followUpOr(entry, request.reply)
-            }
+            is VoiceRequest.Record -> viewModelScope.launch { record(request) }
             is VoiceRequest.Undo -> viewModelScope.launch { undoLast() }
             is VoiceRequest.Edit -> viewModelScope.launch { change(request) }
             is VoiceRequest.Call -> viewModelScope.launch { prepareCall(request) }
@@ -310,9 +309,17 @@ class VoiceViewModel @Inject constructor(
         speaker.say(text) { viewModelScope.launch(Dispatchers.Main) { then() } }
     }
 
-    private suspend fun save(words: String, items: List<Item>, replyText: String?, prompt: String? = null): Entry {
+    /** Keeps what was said: one entry, or one per part said with its own time. */
+    private suspend fun record(request: VoiceRequest.Record) {
+        val parts = request.parts.ifEmpty { listOf(request) }
+        val saved = parts.map { save(it.transcript, it.items, null, at = it.at?.toInstant()) }
+        lastTurn = saved.map { it.id }
+        followUpOr(saved.last(), request.reply)
+    }
+
+    private suspend fun save(words: String, items: List<Item>, replyText: String?, prompt: String? = null, at: Instant? = null): Entry {
         val entry = Entry(
-            UUID.randomUUID().toString(), Instant.now(), words, items, RuleReader.NAME, prompt,
+            UUID.randomUUID().toString(), at ?: Instant.now(), words, items, RuleReader.NAME, prompt,
             source = if (voice) "voice" else "typed"
         )
         withContext(Dispatchers.IO) { dataRepository.saveDataPoint(entry.toDataPoint()) }
@@ -345,7 +352,7 @@ class VoiceViewModel @Inject constructor(
         if (prompt.entryId != null) {
             // "Forty minutes" fills in the walk; "I had a coffee" is something new.
             val ownThings = request.items.any { it.kind != "spend" }
-            if (ownThings || !addTo(prompt, text)) followUpOr(save(text, request.items, null), request.reply)
+            if (ownThings || !addTo(prompt, text)) record(request)
             return
         }
         promptLog.answered(prompt.id)
@@ -354,7 +361,7 @@ class VoiceViewModel @Inject constructor(
         val items = reader.read(text, prompt.context).map { item ->
             if (item.kind == "sleep" && item.minutes == null && prompt.minutes != null) item.copy(minutes = prompt.minutes) else item
         }
-        val entry = save(text, items, null, prompt = prompt.text)
+        val entry = save(text, items, null, prompt = prompt.text, at = request.at?.toInstant())
         followUpOr(entry, if (items.isEmpty()) "Kept" else reader.reply(items))
     }
 
@@ -401,8 +408,10 @@ class VoiceViewModel @Inject constructor(
             reply("There's nothing to take back")
             return
         }
-        withContext(Dispatchers.IO) { dataRepository.deleteDataPoint(id) }
+        val ids = if (id in lastTurn) lastTurn else listOf(id)
+        withContext(Dispatchers.IO) { ids.forEach { dataRepository.deleteDataPoint(it) } }
         lastSavedId = null
+        lastTurn = emptyList()
         _state.update { it.copy(canUndo = false) }
         reply("Taken back")
     }

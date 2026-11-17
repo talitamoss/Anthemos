@@ -95,6 +95,35 @@ object When {
         return Found(date, time, tidy(rest))
     }
 
+    /** A moment already past, and the words without it. */
+    data class Past(val at: ZonedDateTime, val rest: String)
+
+    /**
+     * When something already happened, if the words say: "at about 8 am",
+     * "at half past seven", "yesterday at noon". Null when they don't, so it
+     * happened now. A time still to come today is taken as the morning one
+     * ("at seven", said at nine, is 7 am).
+     */
+    fun past(text: String, now: ZonedDateTime): Past? {
+        // "About 8 am" is a time; "about 8 hours" isn't.
+        var rest = ROUGHLY.replace(" ${text.lowercase()} ") { m ->
+            val after = text.lowercase().let { " $it " }.substring(m.range.last + 1)
+            if (AMOUNT.containsMatchIn(after)) m.value else "at "
+        }
+        var days = 0L
+        DAY_BEFORE_YESTERDAY.find(rest)?.let { rest = rest.replaceRange(it.range, " "); days = 2 }
+        if (days == 0L) YESTERDAY.find(rest)?.let { rest = rest.replaceRange(it.range, " "); days = 1 }
+        val found = timeIn(rest)
+        if (found == null) {
+            return if (days > 0) Past(now.minusDays(days), tidy(rest)) else null
+        }
+        rest = found.second.replace(SOFTENERS, " ")
+        var at = ZonedDateTime.of(now.toLocalDate().minusDays(days), found.first, now.zone)
+        if (at.isAfter(now) && found.first.hour >= 12) at = at.minusHours(12)
+        if (at.isAfter(now)) return null
+        return Past(at, tidy(rest))
+    }
+
     /** A time, and the words without it. */
     private fun timeIn(text: String): Pair<LocalTime, String>? {
         NOON.find(text)?.let { m ->
@@ -169,6 +198,11 @@ object When {
     private const val MONTHS = "january|february|march|april|may|june|july|august|september|october|november|december"
     private const val SUFFIX = "(\\s+(?:a\\s?m|p\\s?m|in the morning|in the afternoon|in the evening|at night))?"
 
+    private val ROUGHLY = Regex("\\b(?:at\\s+)?(?:about|around|roughly|approximately)\\s+(?=(?:\\d|${Numbers.PATTERN})\\b)")
+    private val AMOUNT = Regex("^(?:${Numbers.PATTERN})(?:\\s+and a half)?\\s+(?:hours?|hrs?|minutes?|mins?|days?|weeks?|months?|years?|dollars?|bucks|times|glasses|cups|km|kilometres?|kilos?)\\b")
+    private val DAY_BEFORE_YESTERDAY = Regex("\\b(?:the )?day before yesterday\\b")
+    private val YESTERDAY = Regex("\\byesterday\\b")
+    private val SOFTENERS = Regex("\\b(?:early|late) (?=this (?:morning|afternoon|evening)\\b)|\\bthis (?:morning|afternoon|evening)\\b|\\bin the (?:morning|afternoon|evening)\\b")
     private val IN = Regex("\\bin (?:an? )?(${Numbers.PATTERN})\\s*(minutes?|mins?|hours?|days?|weeks?)\\b")
     private val DAY_AFTER = Regex("\\bthe day after tomorrow\\b|\\bday after tomorrow\\b")
     private val TOMORROW = Regex("\\btomorrow\\b")

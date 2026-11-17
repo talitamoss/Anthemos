@@ -43,6 +43,15 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
 
         val items = mutableListOf<Item>()
         for (clause in clauses(text)) {
+            // Getting up and going to bed: moments, not things to time.
+            if (WAKE.containsMatchIn(clause)) {
+                items += Item("wake", "woke up")
+                continue
+            }
+            if (BED.containsMatchIn(clause)) {
+                items += Item("bed", "went to bed")
+                continue
+            }
             val activity = activity(clause)
             if (activity != null) {
                 items += activity
@@ -201,6 +210,8 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
         )
         private val NEGATIVE = Regex("^(?:no|nope|nah|not yet|not really|nothing|skipped(?: it)?|didn't|haven't)\\b")
 
+        private val WAKE = Regex("\\b(?:woke|woken|wake|waking|got|getting) up\\b|\\b(?:i'm|im|just) up\\b")
+        private val BED = Regex("\\b(?:went|go|going|gone|got) to (?:bed|sleep)\\b|\\bfell asleep\\b|\\bhit the sack\\b")
         private val EAT = Regex("\\b(ate|eaten|eat|eating|snacked)\\b")
         private val HAD = Regex("\\b(had|have had|having|got|grabbed)\\b")
         private val VERB_START = Regex("^(i|we|it|went|was|is|did|made|met|saw|called)\\b")
