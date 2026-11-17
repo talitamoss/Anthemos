@@ -8,7 +8,7 @@ import java.time.ZonedDateTime
 
 /**
  * Works out what a sentence asks for, by rules (docs/anthemos-2.md, "Mind"):
- * undo, a call, teaching a name, a question, or else something to keep.
+ * undo, a change, a call, teaching a name, a question, or else something to keep.
  * Whatever is kept keeps its exact words; [RuleReader] finds the items in it.
  *
  * Speech to text mishears, especially with accents ("call mum" comes out
@@ -29,6 +29,7 @@ class RuleParser(
         val command = text.replace(POLITE, "").trim()
 
         if (command in UNDO) return VoiceRequest.Undo(transcript)
+        Change.parse(command, today())?.let { return VoiceRequest.Edit(transcript, it) }
         // "remind me to call dad at five" is a reminder, not a call now.
         Diary.parseAdd(transcript, today())?.let { return VoiceRequest.AddEvent(transcript, it) }
         call(transcript, command)?.let { return it }

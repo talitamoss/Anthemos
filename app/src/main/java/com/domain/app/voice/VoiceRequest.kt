@@ -60,6 +60,12 @@ sealed class VoiceRequest {
         val question: com.domain.app.sense.PhoneQuestion
     ) : VoiceRequest()
 
+    /** Change or remove something already kept. */
+    data class Edit(
+        override val transcript: String,
+        val change: Change
+    ) : VoiceRequest()
+
     /** Take back the last entry. */
     data class Undo(override val transcript: String) : VoiceRequest()
 }

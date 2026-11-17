@@ -46,7 +46,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -83,7 +82,7 @@ private val PERMISSIONS = listOfNotNull(
 
 /**
  * Speak: the home of Anthemos 2.0. One button to talk, what was heard and
- * said back, and today's entries with undo.
+ * said back, Undo for what was just kept, and today's entries.
  *
  * Each new [listenRequest] (above 0) starts listening straight away, for
  * when Anthemos is opened by a headset or assistant button.
@@ -119,6 +118,7 @@ fun VoiceScreen(
     val keyboard = LocalSoftwareKeyboardController.current
     val prefs = remember { context.getSharedPreferences("anthemos_prompts", Context.MODE_PRIVATE) }
     var senseDeclined by remember { mutableStateOf(prefs.getBoolean("sense_declined", false)) }
+    var senseAsked by remember { mutableStateOf(prefs.getBoolean("sense_asked", false)) }
     // Back from Settings: check whether usage access was turned on.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
@@ -147,11 +147,21 @@ fun VoiceScreen(
             Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Column(Modifier.padding(12.dp)) {
                     Text(
-                        "Let Anthemos read screen time and estimate your sleep? It stays on the phone.",
+                        if (senseAsked) {
+                            // Android blocks this switch for apps not installed from a store.
+                            "Switch greyed out? In App info, tap \u22ee then Allow restricted settings. Then tap Allow again."
+                        } else {
+                            "Read screen time and sleep? It stays on the phone."
+                        },
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        Button(onClick = { viewModel.allowSense() }) { Text("Allow") }
+                        if (senseAsked) OutlinedButton(onClick = { viewModel.appInfo() }) { Text("App info") }
+                        Button(onClick = {
+                            senseAsked = true
+                            prefs.edit().putBoolean("sense_asked", true).apply()
+                            viewModel.allowSense()
+                        }) { Text("Allow") }
                         TextButton(onClick = {
                             senseDeclined = true
                             prefs.edit().putBoolean("sense_declined", true).apply()
@@ -163,14 +173,15 @@ fun VoiceScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        Text(
-            text = state.heard.ifEmpty {
-                if (state.phase == VoicePhase.LISTENING) "Listening…" else "Tap and say what happened, ask a question, add to your calendar, or say who to call"
-            },
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        val heard = state.heard.ifEmpty { if (state.phase == VoicePhase.LISTENING) "Listening\u2026" else "" }
+        if (heard.isNotEmpty()) {
+            Text(
+                heard,
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         if (state.reply.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Text(
@@ -181,8 +192,11 @@ fun VoiceScreen(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+        if (state.canUndo) {
+            TextButton(onClick = { viewModel.undo() }) { Text("Undo") }
+        }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
 
         val listening = state.phase == VoicePhase.LISTENING
         Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
@@ -245,7 +259,7 @@ fun VoiceScreen(
             value = typing,
             onValueChange = { typing = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Or type it") },
+            placeholder = { Text("Or type") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { send() }),
@@ -256,21 +270,13 @@ fun VoiceScreen(
             }
         )
 
-        Spacer(Modifier.height(24.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Today", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            if (today.isNotEmpty()) {
-                TextButton(onClick = { viewModel.undo() }) { Text("Undo last") }
-            }
-        }
-        HorizontalDivider()
-
-        if (today.isEmpty()) {
+        Spacer(Modifier.height(20.dp))
+        if (today.isNotEmpty()) {
             Text(
-                "Nothing yet today.",
-                style = MaterialTheme.typography.bodyMedium,
+                "Today",
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 12.dp)
+                modifier = Modifier.fillMaxWidth()
             )
         }
         LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
@@ -283,24 +289,14 @@ private val TIME = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 private fun EntryRow(entry: Entry) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Text(
             TIME.format(entry.time.atZone(ZoneId.systemDefault())),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 12.dp)
         )
-        Column(Modifier.weight(1f)) {
-            val found = summary(entry)
-            Text(found ?: entry.words, style = MaterialTheme.typography.bodyLarge)
-            if (found != null && entry.items.none { it.kind == "call" }) {
-                Text(
-                    "\u201c${entry.words}\u201d",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        Text(summary(entry) ?: entry.words, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
 }
 

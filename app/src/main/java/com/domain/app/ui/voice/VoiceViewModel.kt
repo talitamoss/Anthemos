@@ -21,6 +21,7 @@ import com.domain.app.prompts.PromptInbox
 import com.domain.app.prompts.PromptLog
 import com.domain.app.prompts.PromptRules
 import com.domain.app.prompts.PromptWorker
+import com.domain.app.voice.Changes
 import com.domain.app.voice.Contacts
 import com.domain.app.voice.Entry
 import com.domain.app.voice.Item
@@ -69,7 +70,9 @@ data class VoiceUiState(
     /** An event just added, which can be handed to Proton. */
     val handoff: Event? = null,
     /** True when the screen can't be read: the phone's usage access is off. */
-    val senseOff: Boolean = false
+    val senseOff: Boolean = false,
+    /** Something was just kept or changed, so Undo is offered. */
+    val canUndo: Boolean = false
 )
 
 data class PendingCall(val match: Contacts.Match, val said: String)
@@ -124,7 +127,7 @@ class VoiceViewModel @Inject constructor(
         // Opened from a prompt notification: show its question while listening.
         val prompt = PromptInbox.take() ?: _state.value.prompt
         _state.update {
-            it.copy(phase = VoicePhase.LISTENING, heard = "", reply = prompt?.text.orEmpty(), prompt = prompt, handoff = null)
+            it.copy(phase = VoicePhase.LISTENING, heard = "", reply = prompt?.text.orEmpty(), prompt = prompt, handoff = null, canUndo = false)
         }
         listener.start(object : Listener.Callbacks {
             override fun onListening() = Unit
@@ -148,7 +151,7 @@ class VoiceViewModel @Inject constructor(
         if (text.isBlank()) return
         listener.cancel()
         voice = false
-        _state.update { it.copy(phase = phaseFor(it), heard = text.trim(), handoff = null) }
+        _state.update { it.copy(phase = phaseFor(it), heard = text.trim(), handoff = null, canUndo = false) }
         handle(text.trim())
     }
 
@@ -172,6 +175,17 @@ class VoiceViewModel @Inject constructor(
 
     fun allowSense() {
         context.startActivity(sense.settings())
+    }
+
+    /**
+     * This app's page in Settings. Android blocks usage access for apps not
+     * from a store until "Allow restricted settings" is chosen there.
+     */
+    fun appInfo() {
+        context.startActivity(
+            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
     }
 
     fun refreshSense() = _state.update { it.copy(senseOff = !sense.allowed()) }
@@ -217,6 +231,7 @@ class VoiceViewModel @Inject constructor(
                 followUpOr(entry, request.reply)
             }
             is VoiceRequest.Undo -> viewModelScope.launch { undoLast() }
+            is VoiceRequest.Edit -> viewModelScope.launch { change(request) }
             is VoiceRequest.Call -> viewModelScope.launch { prepareCall(request) }
             is VoiceRequest.Teach -> viewModelScope.launch { teach(request) }
             is VoiceRequest.Ask -> viewModelScope.launch { answer(request) }
@@ -288,6 +303,7 @@ class VoiceViewModel @Inject constructor(
         )
         withContext(Dispatchers.IO) { dataRepository.saveDataPoint(entry.toDataPoint()) }
         lastSavedId = entry.id
+        _state.update { it.copy(canUndo = true) }
         replyText?.let { reply(it) }
         return entry
     }
@@ -363,7 +379,32 @@ class VoiceViewModel @Inject constructor(
         }
         withContext(Dispatchers.IO) { dataRepository.deleteDataPoint(id) }
         lastSavedId = null
+        _state.update { it.copy(canUndo = false) }
         reply("Taken back")
+    }
+
+    /** "Change the coffee to tea", "delete the coffee", "that was at eight". */
+    private suspend fun change(request: VoiceRequest.Edit) {
+        val now = ZonedDateTime.now()
+        val since = now.minusDays(7).toInstant()
+        val entries = withContext(Dispatchers.IO) {
+            dataRepository.getPluginData(Entry.PLUGIN_ID).first().mapNotNull(Entry::from)
+        }.filter { it.source != "phone" && it.time.isAfter(since) }.sortedByDescending { it.time }
+        val last = entries.firstOrNull { it.id == lastSavedId } ?: entries.firstOrNull()
+        when (val outcome = Changes.apply(request.change, entries, last, now)) {
+            is Changes.Outcome.Save -> {
+                withContext(Dispatchers.IO) { dataRepository.saveDataPoint(outcome.entry.toDataPoint()) }
+                lastSavedId = outcome.entry.id
+                reply(outcome.reply)
+            }
+            is Changes.Outcome.Delete -> {
+                withContext(Dispatchers.IO) { dataRepository.deleteDataPoint(outcome.entry.id) }
+                if (lastSavedId == outcome.entry.id) lastSavedId = null
+                reply(outcome.reply)
+            }
+            is Changes.Outcome.Say -> reply(outcome.reply)
+            Changes.Outcome.Keep -> keepWords(request.transcript)
+        }
     }
 
     private suspend fun prepareCall(request: VoiceRequest.Call) {
