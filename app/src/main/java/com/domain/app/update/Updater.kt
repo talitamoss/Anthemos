@@ -26,6 +26,10 @@ data class Release(val versionCode: Int, val versionName: String, val apkUrl: St
 
 sealed class UpdateState {
     object Idle : UpdateState()
+    /** Asked for from Settings: looking now. */
+    object Checking : UpdateState()
+    /** Asked for from Settings: nothing newer. */
+    object UpToDate : UpdateState()
     data class Available(val release: Release) : UpdateState()
     data class Downloading(val release: Release, val percent: Int) : UpdateState()
     object Installing : UpdateState()
@@ -49,8 +53,9 @@ object Updater {
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
     /** Looks for a newer build; quiet when offline. */
-    suspend fun check() = withContext(Dispatchers.IO) {
+    suspend fun check(asked: Boolean = false) = withContext(Dispatchers.IO) {
         if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Installing) return@withContext
+        if (asked) _state.value = UpdateState.Checking
         val release = runCatching {
             client.newCall(Request.Builder().url(MANIFEST).build()).execute().use { response ->
                 if (!response.isSuccessful) return@use null
@@ -63,10 +68,11 @@ object Updater {
                 )
             }
         }.getOrNull()
-        _state.value = if (release != null && release.versionCode > BuildConfig.VERSION_CODE) {
-            UpdateState.Available(release)
-        } else {
-            UpdateState.Idle
+        _state.value = when {
+            release != null && release.versionCode > BuildConfig.VERSION_CODE -> UpdateState.Available(release)
+            asked && release == null -> UpdateState.Failed("Couldn't reach anthemos.org. Check the connection and try again.")
+            asked -> UpdateState.UpToDate
+            else -> UpdateState.Idle
         }
     }
 

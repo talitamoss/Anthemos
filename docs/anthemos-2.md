@@ -29,7 +29,7 @@ Not on a big model on the phone, and not on a server we run for everyone: on **e
 
 ## Hey Poly
 
-The **Hey Poly** switch at the top of Speak turns on listening for one phrase, all the time, until it's switched off (`voice/WakeService.kt`). On hearing it, a short tone, and Speak opens listening, over the lock screen if need be. "Anthemos" isn't a word the speech model knows, so the phrase is Hey Poly (also heard as Polly, Pauly, Paulie).
+The **Hey Poly** switch in Settings (`ui/settings/sections/HeyPolySetting.kt`) turns on listening for one phrase, all the time, until it's switched off (`voice/WakeService.kt`). On hearing it, a short tone, and Speak opens listening, over the lock screen if need be. "Anthemos" isn't a word the speech model knows, so the phrase is Hey Poly (also heard as Polly, Pauly, Paulie).
 
 - **Nothing is kept or sent.** Audio is only checked for the phrase, on the phone, by the same Vosk model Speak uses (loaded once for both, `voice/SpeechModel.kt`).
 - **Light on battery:** each fifth of a second is measured first, and only sound louder than the room's own noise goes to the recogniser (`SoundGate`), which knows only the phrase. It lets go of the microphone during calls, on battery saver, below 15% (unless charging), and while Speak is listening.
@@ -133,7 +133,7 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 - **Records** are saved to the existing encrypted store with `source = "voice"` and the transcript in `metadata`, using the same value keys as manual entries. Today's entries show under the button, with **Undo last**.
 - **Calls** look up the contact, ask "Call Sam?" out loud, then listen for yes or no (buttons too), and only then dial.
 - **Opened to listen:** a headset or Bluetooth long press (`VOICE_COMMAND`), the assist gesture if Anthemos is chosen for it, or the `com.anthemos.LISTEN` intent all open Speak listening.
-- **Updates itself** (`update/Updater.kt`): on opening, Speak checks `anthemos.org/builds/anthemos2-latest.json` and shows "Update ready" with one button. It downloads the APK, checks its SHA-256 and installs it through Android's package installer. The first time, Android asks to allow "Install unknown apps" for Anthemos 2. CI signs every build with one fixed key (secrets `ANTHEMOS_KEYSTORE_B64` and `ANTHEMOS_KEYSTORE_PASSWORD`) and numbers it 100 + the run number. Before this, each build had a throwaway key, so a new build wouldn't install over the old one.
+- **Updates itself** (`update/Updater.kt`): on opening, Speak checks `anthemos.org/builds/anthemos2-latest.json` quietly and puts a dot on its Settings button when a newer build is out. Settings shows the version, "Check for updates", and "Update ready" with one button (`update/UpdateCard.kt`). It downloads the APK, checks its SHA-256 and installs it through Android's package installer. The first time, Android asks to allow "Install unknown apps" for Anthemos 2. CI signs every build with one fixed key (secrets `ANTHEMOS_KEYSTORE_B64` and `ANTHEMOS_KEYSTORE_PASSWORD`) and numbers it 100 + the run number. Before this, each build had a throwaway key, so a new build wouldn't install over the old one.
 - **Installed beside 1.x** as `com.anthemos.app.two` ("Anthemos 2"), so 1.x data is untouched. CI publishes each build as `anthemos.org/builds/anthemos2-latest.apk`.
 
 **Next:** app commands: "play X on Spotify" (Android's play-from-search), pause and skip for whatever is playing, start and stop track recording in OsmAnd (its intent API), "open X", timers.
@@ -176,6 +176,12 @@ answers only when nothing was said. A question nothing answers is said so,
 never logged (`questions.other`). Proton Calendar read through its share
 link, and adding opens Proton filled in. Music: play, pause, skip, louder,
 "play" anything.
+
+**2.16:** versions are now 2.<release>.<build> (2.16.132): the release
+(`anthemosRelease` in `gradle.properties`) goes up with each batch of
+features, where the alphas counted before; the build is CI's run count.
+Hey Poly and updates moved from Speak to Settings, with "Check for
+updates"; Speak's Settings button shows a dot when an update is ready.
 
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 

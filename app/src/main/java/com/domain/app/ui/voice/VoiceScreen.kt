@@ -7,7 +7,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Card
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
@@ -69,7 +70,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.domain.app.voice.Entry
-import com.domain.app.update.UpdateBanner
+import com.domain.app.update.UpdateState
+import com.domain.app.update.Updater
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -127,6 +129,11 @@ fun VoiceScreen(
         }
     }
 
+    // Checks quietly on open; the update itself is in Settings.
+    val update by Updater.state.collectAsState()
+    val updateReady = update is UpdateState.Available || update is UpdateState.NeedsPermission
+    LaunchedEffect(Unit) { Updater.check() }
+
     var typing by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
     val prefs = remember { context.getSharedPreferences("anthemos_prompts", Context.MODE_PRIVATE) }
@@ -148,17 +155,13 @@ fun VoiceScreen(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Anthemos", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            // Hey Poly: listening for one phrase, all the time (docs/anthemos-2.md).
-            Text("Hey Poly", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 8.dp))
-            Switch(checked = state.heyPoly, onCheckedChange = { on ->
-                if (on && !micGranted()) permissions.launch(PERMISSIONS) else viewModel.heyPoly(on)
-            })
+            // Hey Poly and updates live in Settings; a dot here when an update is ready.
             IconButton(onClick = onNavigateToSettings) {
-                Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                BadgedBox(badge = { if (updateReady) Badge() }) {
+                    Icon(Icons.Filled.Settings, contentDescription = if (updateReady) "Settings, update ready" else "Settings")
+                }
             }
         }
-
-        UpdateBanner(Modifier.padding(top = 8.dp))
 
         // Screen time and estimated sleep, once, until allowed or declined.
         if (state.senseOff && !senseDeclined) {

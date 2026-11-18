@@ -1,4 +1,4 @@
-// app/src/main/java/com/domain/app/update/UpdateBanner.kt
+// app/src/main/java/com/domain/app/update/UpdateCard.kt
 package com.domain.app.update
 
 import androidx.compose.foundation.layout.Column
@@ -11,7 +11,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -19,19 +18,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.domain.app.BuildConfig
 import kotlinx.coroutines.launch
 
-/** Shows when a newer build is out, with one button to update. Checks on open. */
+/**
+ * Updates, in Settings: the version on the phone, "Check for updates", and
+ * one button to update when a newer build is out. Speak checks quietly on
+ * open and marks the Settings button when one is.
+ */
 @Composable
-fun UpdateBanner(modifier: Modifier = Modifier) {
+fun UpdateCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by Updater.state.collectAsState()
-
-    LaunchedEffect(Unit) { Updater.check() }
+    val check = { scope.launch { Updater.check(asked = true) }; Unit }
 
     val (message, action) = when (val s = state) {
-        UpdateState.Idle -> return
+        UpdateState.Idle -> "Version ${BuildConfig.VERSION_NAME}" to ("Check for updates" to check)
+        UpdateState.Checking -> "Checking…" to null
+        UpdateState.UpToDate -> "Up to date: ${BuildConfig.VERSION_NAME}" to ("Check again" to check)
         is UpdateState.Available -> "Update ready: ${s.release.versionName}" to
             ("Update" to { scope.launch { Updater.install(context, s.release) }; Unit })
         is UpdateState.Downloading -> "Downloading ${s.release.versionName}… ${s.percent}%" to null
@@ -42,7 +47,7 @@ fun UpdateBanner(modifier: Modifier = Modifier) {
                 scope.launch { Updater.check() }
                 Unit
             })
-        is UpdateState.Failed -> s.message to ("Try again" to { scope.launch { Updater.check() }; Unit })
+        is UpdateState.Failed -> s.message to ("Try again" to check)
     }
 
     Card(modifier.fillMaxWidth()) {
