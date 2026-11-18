@@ -107,6 +107,7 @@ class ChangeTest {
     fun `nothing found is said`() {
         val coffee = entry("1", "I had a coffee")
         assertEquals("I couldn't find pizza", (apply("delete the pizza", coffee) as Changes.Outcome.Say).reply)
-        assertNull((change("delete the last one") as Change.Remove).what)
+        // "Delete the last one" takes back the last thing said, like undo.
+        assertTrue(RuleParser().parse("delete the last one") is VoiceRequest.Undo)
     }
 }

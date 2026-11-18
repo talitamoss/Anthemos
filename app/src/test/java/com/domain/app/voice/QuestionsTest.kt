@@ -80,4 +80,21 @@ class QuestionsTest {
     fun `last thing by its words`() {
         assertEquals("Last pizza: on 27 October.", ask("when did I last have pizza"))
     }
+
+    @Test
+    fun `what time, for sleep worked out from waking`() {
+        // Woke at 6:30 this morning after 7 hours; went to bed at 11:15 pm the night before.
+        val nights = listOf(
+            Entry("w", at(0, 6, 30), "I woke up at 6:30. 7 hours", listOf(Item("wake", "woke up"), Item("sleep", "sleep", minutes = 420)), "t"),
+            Entry("b", at(2, 23, 15), "went to bed", listOf(Item("bed", "went to bed")), "t"),
+            Entry("c", at(1, 8, 0), "coffee", listOf(Item("drink", "coffee", group = "coffee")), "t"),
+            Entry("d", at(1, 15, 0), "coffee", listOf(Item("drink", "coffee", group = "coffee")), "t")
+        )
+        fun ask(text: String) = Questions.answer(Questions.parse(text, now) ?: error(text), nights, now)
+        assertEquals("You went to sleep at about 11:30 pm last night.", ask("what time did I go to sleep yesterday"))
+        assertEquals("You went to sleep at about 11:30 pm last night.", ask("when did I go to bed"))
+        assertEquals("You woke up today at 6:30 am.", ask("what time did I wake up"))
+        assertEquals("Coffee yesterday at 8:00 am and 3:00 pm.", ask("what time did I have coffee yesterday"))
+        assertEquals("I don't have you waking up yesterday.", ask("when did I wake up yesterday"))
+    }
 }

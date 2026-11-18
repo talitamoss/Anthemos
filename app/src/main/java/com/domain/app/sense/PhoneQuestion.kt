@@ -7,7 +7,11 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-/** Questions the phone itself can answer: screen time and last night's sleep. */
+/**
+ * Questions the phone itself can answer: screen time and last night's sleep.
+ * "What time did I go to bed" is a question about what was said
+ * (`Questions`), which asks the phone only when nothing was.
+ */
 sealed class PhoneQuestion {
     data class ScreenTime(val from: Instant, val until: Instant, val phrase: String) : PhoneQuestion()
     object Slept : PhoneQuestion()
@@ -28,7 +32,7 @@ sealed class PhoneQuestion {
         }
 
         private val SCREEN = Regex("\\bscreen time\\b|how (?:long|much time) (?:have i|did i) (?:been |spent |spend )?on (?:my|the) phone")
-        private val SLEPT = Regex("how (?:long|much|well) did i sleep|what time did i (?:go to bed|get up|wake up|fall asleep)|how much sleep did i get")
+        private val SLEPT = Regex("how (?:long|much|well) did i sleep|how much sleep did i get")
     }
 }
 

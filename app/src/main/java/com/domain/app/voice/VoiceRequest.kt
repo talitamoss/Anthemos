@@ -83,4 +83,7 @@ sealed class VoiceRequest {
 
     /** Take back the last entry. */
     data class Undo(override val transcript: String) : VoiceRequest()
+
+    /** A question nothing answers yet. */
+    data class Unanswered(override val transcript: String) : VoiceRequest()
 }

@@ -24,8 +24,8 @@ object ChangeFocus {
         "change", "Fixing what was kept", listOf(
             command(
                 "change.undo", "Takes back everything from the last thing said",
-                listOf("undo", "scratch that"),
-                { s -> if (s.command in RuleParser.UNDO) VoiceRequest.Undo(s.transcript) else null }
+                listOf("undo", "scratch that", "undo the last entry", "delete my last one"),
+                { s -> if (RuleParser.UNDO.matches(s.command)) VoiceRequest.Undo(s.transcript) else null }
             ) { undo() },
             command(
                 "change.edit", "Changes, moves or removes something kept",
@@ -49,7 +49,8 @@ object ChangeFocus {
     private suspend fun Turn.todayNewest(): String? {
         val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
         return withContext(Dispatchers.IO) { data.getPluginData(Entry.PLUGIN_ID).first() }
-            .mapNotNull(Entry::from).filter { !it.time.isBefore(start) }.maxByOrNull { it.time }?.id
+            // Places the phone kept on its own aren't something said.
+            .mapNotNull(Entry::from).filter { it.source != "phone" && !it.time.isBefore(start) }.maxByOrNull { it.time }?.id
     }
 
     /** "Change the coffee to tea", "delete the coffee", "that was at eight". */

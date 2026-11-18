@@ -23,6 +23,9 @@ sealed class Question {
 
     /** "What did I eat yesterday?" [kind] null means everything. */
     data class What(val kind: String?, val period: Period) : Question()
+
+    /** "What time did I go to sleep yesterday?", "when did I wake up?" [period] null means the latest. */
+    data class At(val subject: Subject, val period: Period?) : Question()
 }
 
 /**
@@ -38,7 +41,17 @@ object Questions {
             .replace(Regex("^\\s*(hey|ok|okay)?\\s*(anthemos)?\\s*"), "")
             .replace(Regex("\\s+"), " ").trim()
 
-        LAST.matchEntire(text)?.let { m -> return Question.Last(subject(m.groupValues[1])) }
+        AT.matchEntire(text)?.let { m ->
+            val (rest, period) = splitPeriod(m.groupValues[1], now)
+            return Question.At(subject(rest), period)
+        }
+
+        LAST.matchEntire(text)?.let { m ->
+            // "When did I go to sleep", "when did I have coffee yesterday": a time, not the last time.
+            val (rest, period) = splitPeriod(m.groupValues[1], now)
+            if (period != null || moment(rest) != null) return Question.At(subject(rest), period)
+            return Question.Last(subject(m.groupValues[1]))
+        }
 
         WHAT.matchEntire(text)?.let { m ->
             val kind = when (m.groupValues[1]) {
@@ -124,6 +137,8 @@ object Questions {
             }.replaceFirstChar { it.uppercase() }
         }
 
+        is Question.At -> at(question, entries, now, alias)
+
         is Question.What -> {
             val items = entries
                 .filter { it.time >= question.period.start && it.time < question.period.end }
@@ -139,6 +154,85 @@ object Questions {
                 "${question.period.phrase.replaceFirstChar { it.uppercase() }}: ${list.joinToString(", ")}."
             }
         }
+    }
+
+    /** Going to sleep or waking up: the phone can guess these when nothing was said. */
+    fun aboutSleep(question: Question.At) = moment(question.subject.words) != null
+
+    /** The times a [Question.At] asks about, oldest first; false where worked out, not said. */
+    fun found(question: Question.At, entries: List<Entry>, now: ZonedDateTime, alias: (String) -> String? = { null }): List<Pair<Instant, Boolean>> {
+        val moment = moment(question.subject.words)
+        val times: List<Pair<Instant, Boolean>> = when (moment) {
+            BED -> bedtimes(entries, now)
+            WAKE -> entries.filter { e -> e.items.any { it.kind == "wake" } }.map { it.time to true }
+            else -> entries.filter { e ->
+                e.items.any { matches(it, question.subject, alias) } ||
+                    (!question.subject.call && containsWords(e.words, question.subject.words))
+            }.map { it.time to true }
+        }.sortedBy { it.first }
+        // A night belongs to the evening it began: asleep at 1 am is still last night.
+        fun day(t: Instant) = if (moment == BED) t.minus(NIGHT) else t
+        val period = question.period
+        return if (period == null) listOfNotNull(times.lastOrNull())
+        else times.filter { (t, _) -> day(t) >= period.start && day(t) < period.end }
+    }
+
+    private fun at(question: Question.At, entries: List<Entry>, now: ZonedDateTime, alias: (String) -> String?): String {
+        val moment = moment(question.subject.words)
+        val period = question.period
+        val found = found(question, entries, now, alias)
+        val phrase = period?.phrase ?: "yet"
+        if (found.isEmpty()) return when (moment) {
+            BED -> "I don't know when you went to sleep $phrase. Tell me when you wake up, and how long you slept."
+            WAKE -> "I don't have you waking up $phrase."
+            else -> "I don't have ${question.subject.words.ifEmpty { "that" }} $phrase."
+        }
+        val (time, exact) = found.last()
+        val clock = TIME.format(time.atZone(now.zone)).lowercase()
+        val about = if (exact) "" else "about "
+        return when (moment) {
+            BED -> "You went to sleep at $about$clock ${nightSaid(time, now, period)}."
+            WAKE -> "You woke up ${whenSaid(time, now)}."
+            else -> {
+                val all = found.map { TIME.format(it.first.atZone(now.zone)).lowercase() }
+                val day = period?.phrase ?: whenSaid(time, now).substringBefore(" at ")
+                val what = question.subject.words.replaceFirstChar { it.uppercase() }
+                if (all.size == 1) "$what ${whenSaid(time, now)}." else "$what $day at ${all.dropLast(1).joinToString(", ")} and ${all.last()}."
+            }
+        }
+    }
+
+    /**
+     * When sleep began: said ("went to bed at 11"), or worked out from a
+     * wake-up and the hours slept (about). A night with both keeps the one said.
+     */
+    private fun bedtimes(entries: List<Entry>, now: ZonedDateTime): List<Pair<Instant, Boolean>> {
+        val said = entries.filter { e -> e.items.any { it.kind == "bed" } }.map { it.time to true }
+        val worked = entries.mapNotNull { e ->
+            val slept = e.items.firstOrNull { it.kind == "sleep" && it.minutes != null } ?: return@mapNotNull null
+            val woke = e.items.any { it.kind == "wake" } || e.time.atZone(now.zone).hour < 12
+            if (!woke) null else e.time.minusSeconds(slept.minutes!! * 60L) to false
+        }
+        fun night(t: Instant) = t.minus(NIGHT).atZone(now.zone).toLocalDate()
+        val nights = said.map { night(it.first) }.toSet()
+        return said + worked.filter { night(it.first) !in nights }
+    }
+
+    private fun nightSaid(time: Instant, now: ZonedDateTime, period: Period?): String {
+        period?.let { if (it.phrase == "yesterday" || it.phrase == "last night") return "last night" else return it.phrase }
+        val days = ChronoUnit.DAYS.between(time.minus(NIGHT).atZone(now.zone).toLocalDate(), now.toLocalDate())
+        return when (days) {
+            0L -> "tonight"
+            1L -> "last night"
+            else -> "on ${time.minus(NIGHT).atZone(now.zone).dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }} night"
+        }
+    }
+
+    /** Going to sleep or waking up, however it's said; null for anything else. */
+    private fun moment(words: String): String? = when {
+        Regex("\\b(?:wake|woke|woken|waken|(?:get|got|getting) up)\\b").containsMatchIn(words) -> WAKE
+        Regex("\\b(?:sleep|asleep|bed|sack)\\b").containsMatchIn(words) -> BED
+        else -> null
     }
 
     // ---- matching
@@ -222,6 +316,7 @@ object Questions {
         return when {
             p.contains("today") || p.contains("this morning") || p.contains("tonight") -> day(now, 0, "today")
             p.contains("yesterday") -> day(now, 1, "yesterday")
+            p.contains("last night") -> day(now, 1, "last night")
             p.contains("this week") -> Period(monday.toInstant(), end, "this week")
             p.contains("last week") -> Period(monday.minusWeeks(1).toInstant(), monday.toInstant(), "last week")
             p.contains("this month") -> Period(first.toInstant(), end, "this month")
@@ -247,6 +342,10 @@ object Questions {
         }
     }
 
+    private const val BED = "bed"
+    private const val WAKE = "wake"
+    private val NIGHT = java.time.Duration.ofHours(6)
+    private val AT = Regex("^(?:what time|at what time) (?:did|do|have|had|was) (?:i|we) (.+)$")
     private val LAST = Regex("^when (?:did (?:i|we) last|was the last time (?:that )?(?:i|we)|have (?:i|we) last|did (?:i|we)|was (?:i|we) last) (.+)$")
     private val WHAT = Regex("^what (?:did|have) (?:i|we) (eat|eaten|have|had|drink|drunk|do|done)\\b(.*)$")
     private val HOW = Regex("^how (many|much) (.+)$")
@@ -254,7 +353,7 @@ object Questions {
     private val CALL_VERB = Regex("^(?:call|called|ring|rang|rung|phone|phoned|speak to|spoke to|spoken to|talk to|talked to|talk with|talked with)\\b")
     private val LEADING = Regex("^(?:(?:have|had|eat|ate|eaten|drink|drank|drunk|go for|went for|gone for|go to|went to|been to|do|did|done|a|an|some|any|the|my)\\s+)+")
     private val PERIOD = Regex(
-        "\\b(today|this morning|tonight|yesterday|this week|last week|this month|last month|this year|" +
+        "\\b(today|this morning|tonight|last night|yesterday|this week|last week|this month|last month|this year|" +
             "(?:in )?the (?:last|past) (?:${Numbers.PATTERN}) (?:days?|weeks?|months?))\\b"
     )
 }

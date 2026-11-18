@@ -167,7 +167,8 @@ object Diary {
 
     private val WHEN_IS = Regex("^when(?:'s| is| are) (?:my |the |our )?(.+?)(?: on)?$")
     private val WHATS_ON = Regex(
-        "^(?:(?:what's|what is|whats) (?:on|happening|coming up|in my (?:calendar|diary))|what (?:have|do) i (?:got|have) on|what have i got)(.*)$"
+        "^(?:(?:what's|what is|whats) (?:on|happening|coming up|(?:in|on) my (?:calendar|diary|schedule))|what (?:have|do) i (?:got|have) on|what have i got|" +
+            "what does my day look like)(.*)$"
     )
     private val FREE = Regex("^(?:am i|are we) (?:free|busy|available)(.*)$")
 }

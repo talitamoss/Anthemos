@@ -24,7 +24,8 @@ class RuleParser(
 
     /** The command a sentence was, and what it asks for. */
     fun match(raw: String): Match {
-        val transcript = raw.trim()
+        // "Hey Polly, ..." is who it's said to, not part of what's said.
+        val transcript = raw.trim().replace(NAME, "").ifEmpty { raw.trim() }
         val text = transcript.lowercase()
             .replace(Regex("[.!?,]"), " ")
             .replace(Regex("\\s+"), " ")
@@ -93,8 +94,14 @@ class RuleParser(
     }
 
     companion object {
-        internal val UNDO = setOf("undo", "undo that", "take that back", "delete that", "scratch that", "cancel that", "remove that")
-        private val POLITE = Regex("^(?:(?:hey|ok|okay)\\s+)?(?:(?:anthemos|poly|polly|pauly|paulie)\\s+)?(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|i want to\\s+|i'd like to\\s+|i need to\\s+)*")
+        /** "Undo", "undo the last entry", "delete my last one", "take that back". */
+        internal val UNDO = Regex(
+            "^(?:undo|undue|scratch that|take (?:that|it) back|take back (?:that|the last (?:one|entry|thing))|" +
+                "(?:undo|delete|remove|cancel|erase|forget|scratch) (?:that|it|this|last entry|the previous (?:one|entry)|" +
+                "(?:the|my) last(?: one| entry| thing| log| note| record)?))(?: please)?$"
+        )
+        private val NAME = Regex("^(?:(?:hey|ok|okay)[,\\s]+)?(?:anthemos|poly|polly|poli|pauly|paulie)\\b[,.!]*\\s*", RegexOption.IGNORE_CASE)
+        private val POLITE = Regex("^(?:(?:hey|ok|okay)\\s+)?(?:(?:anthemos|poly|polly|poli|pauly|paulie)\\s+)?(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|i want to\\s+|i'd like to\\s+|i need to\\s+)*")
 
         // How "call" gets heard. These alone don't make a call: if no
         // contact matches, the words are kept instead.

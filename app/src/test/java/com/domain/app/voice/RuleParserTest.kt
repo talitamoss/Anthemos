@@ -144,4 +144,20 @@ class RuleParserTest {
         assertTrue(parser.parse("when did I last call dad") is VoiceRequest.Ask)
         assertTrue(parser.parse("how many coffees have I had this week") is VoiceRequest.Ask)
     }
+
+    @Test
+    fun `undo said other ways, and to Polly`() {
+        for (said in listOf("undo the last entry", "Polly, undo the last entry", "hey poly delete my last one", "take that back", "remove the last one")) {
+            assertTrue(said, parser.parse(said) is VoiceRequest.Undo)
+        }
+    }
+
+    @Test
+    fun `questions to Polly are questions, never logged`() {
+        assertTrue(parser.parse("Hey Polly, what time did I go to sleep yesterday?") is VoiceRequest.Ask)
+        assertTrue(parser.parse("Polly what's in my calendar for the day") is VoiceRequest.AskDiary)
+        assertTrue(parser.parse("how far is the moon") is VoiceRequest.Unanswered)
+        assertEquals(listOf("coffee"), labels("Hey Polly, I had a coffee"))
+        assertEquals("I had a coffee", record("Hey Polly, I had a coffee").transcript)
+    }
 }

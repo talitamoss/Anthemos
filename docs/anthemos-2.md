@@ -160,6 +160,15 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 **alpha 14:** Hey Poly (above).
 
+**alpha 15:** "Hey Polly" at the start of anything said is dropped before it's
+read, so questions and the calendar hear it too. Undo takes "undo the last
+entry", "delete my last one" and the like. "What time did I go to sleep
+yesterday", "when did I wake up", "what time did I have coffee": going to
+sleep is said ("went to bed") or worked out from a wake-up and the hours
+slept, and a night belongs to the evening it began; the phone's guess
+answers only when nothing was said. A question nothing answers is said so,
+never logged (`questions.other`).
+
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 
 **What the phone already knows** (opt-in, each one separately):

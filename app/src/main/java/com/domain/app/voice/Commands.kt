@@ -81,7 +81,7 @@ object Commands {
     val order = listOf(
         "change.undo", "change.edit",
         "kronk.connect", "places.here", "places.was", "places.trail", "kronk.stop", "kronk.share", "places.name",
-        "calendar.add", "calls.call", "calls.teach", "calendar.ask", "phone.ask", "questions.ask",
+        "calendar.add", "calls.call", "calls.teach", "calendar.ask", "phone.ask", "questions.ask", "questions.other",
         "notes.note", "log.record"
     )
 
