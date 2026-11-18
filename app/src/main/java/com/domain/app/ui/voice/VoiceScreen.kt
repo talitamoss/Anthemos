@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Card
+import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
@@ -147,6 +148,11 @@ fun VoiceScreen(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Anthemos", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            // Hey Poly: listening for one phrase, all the time (docs/anthemos-2.md).
+            Text("Hey Poly", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 8.dp))
+            Switch(checked = state.heyPoly, onCheckedChange = { on ->
+                if (on && !micGranted()) permissions.launch(PERMISSIONS) else viewModel.heyPoly(on)
+            })
             IconButton(onClick = onNavigateToSettings) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
             }

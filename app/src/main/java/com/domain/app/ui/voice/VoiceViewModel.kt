@@ -27,6 +27,7 @@ import com.domain.app.voice.Listener
 import com.domain.app.voice.RuleParser
 import com.domain.app.voice.RuleReader
 import com.domain.app.voice.Speaker
+import com.domain.app.voice.WakeService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +63,9 @@ data class VoiceUiState(
     /** Something was just kept or changed, so Undo is offered. */
     val canUndo: Boolean = false,
     /** Location permission is needed: the screen asks for it. */
-    val askLocation: Boolean = false
+    val askLocation: Boolean = false,
+    /** Listening for Hey Poly. */
+    val heyPoly: Boolean = false
 )
 
 /**
@@ -144,6 +147,7 @@ class VoiceViewModel @Inject constructor(
     init {
         listener.prepare()
         refreshSense()
+        _state.update { it.copy(heyPoly = WakeService.on(appContext)) }
         // Back from signing in to Kronk in the browser.
         viewModelScope.launch {
             KronkInbox.code.collect { code ->
@@ -228,6 +232,20 @@ class VoiceViewModel @Inject constructor(
             Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${appContext.packageName}"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+    }
+
+    /** The Hey Poly switch. */
+    fun heyPoly(on: Boolean) {
+        WakeService.set(appContext, on)
+        _state.update { it.copy(heyPoly = on) }
+        // Opening Speak from the background needs "Display over other apps".
+        if (on && !android.provider.Settings.canDrawOverlays(appContext)) {
+            appContext.startActivity(
+                Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${appContext.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            turn.reply("Allow Display over other apps, so Hey Poly can open Anthemos when it hears you")
+        }
     }
 
     fun refreshSense() = _state.update { it.copy(senseOff = !turn.sense.allowed()) }

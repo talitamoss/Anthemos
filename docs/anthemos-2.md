@@ -29,11 +29,11 @@ Not on a big model on the phone, and not on a server we run for everyone: on **e
 
 ## Hey Poly
 
-"Start listening for Hey Poly" turns on listening for one phrase, all the time, until "stop listening for Hey Poly" (`voice/WakeService.kt`, `focus/WakeFocus.kt`). On hearing it, a short tone, and Speak opens listening, over the lock screen if need be. "Anthemos" isn't a word the speech model knows, so the phrase is Hey Poly (also heard as Polly, Pauly, Paulie).
+The **Hey Poly** switch at the top of Speak turns on listening for one phrase, all the time, until it's switched off (`voice/WakeService.kt`). On hearing it, a short tone, and Speak opens listening, over the lock screen if need be. "Anthemos" isn't a word the speech model knows, so the phrase is Hey Poly (also heard as Polly, Pauly, Paulie).
 
 - **Nothing is kept or sent.** Audio is only checked for the phrase, on the phone, by the same Vosk model Speak uses (loaded once for both, `voice/SpeechModel.kt`).
 - **Light on battery:** each fifth of a second is measured first, and only sound louder than the room's own noise goes to the recogniser (`SoundGate`), which knows only the phrase. It lets go of the microphone during calls, on battery saver, below 15% (unless charging), and while Speak is listening.
-- **Android's limits:** a foreground service with a notification, and GrapheneOS's microphone dot, while it runs. It can only take the microphone while Anthemos is on screen, so after a restart a notification asks for one tap. Opening Speak from the background needs "Display over other apps", asked for when it's turned on; without it, hearing the phrase shows a "Tap to talk" notification.
+- **Android's limits:** a foreground service with a notification, and GrapheneOS's microphone dot, while it runs. It can only take the microphone while Anthemos is on screen, so after a restart a notification asks for one tap. Opening Speak from the background needs "Display over other apps", asked for when it's switched on; without it, hearing the phrase shows a "Tap to talk" notification.
 
 ## Commands
 
