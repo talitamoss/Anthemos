@@ -3,6 +3,7 @@ package com.domain.app.focus
 
 import com.domain.app.prompts.Prompt
 import com.domain.app.prompts.PromptRules
+import com.domain.app.voice.Day
 import com.domain.app.voice.Entry
 import com.domain.app.voice.Focus
 import com.domain.app.voice.Item
@@ -118,6 +119,12 @@ object LogFocus {
     private suspend fun Turn.answer(prompt: Prompt, request: VoiceRequest.Record) {
         val text = request.transcript
         if (prompt.entryId != null) {
+            // "Skip", "no": the rest of this entry's questions are dropped.
+            if (SKIP.matches(text.lowercase().trim().trimEnd('.', '!'))) return reply("Okay")
+            if (prompt.field?.startsWith("detail:") == true) {
+                if (!addDetail(prompt, text)) record(request)
+                return
+            }
             // "Forty minutes" fills in the walk; "I had a coffee" is something new.
             // "What did you have?" and "How did you sleep?" are answered with things; the rest aren't.
             val ownThings = prompt.field !in setOf("what", "how") && request.items.any { it.kind != "spend" && it.kind != "sleep" }
@@ -132,6 +139,20 @@ object LogFocus {
         }
         val entry = save(text, items, prompt = prompt.text, at = request.at?.toInstant())
         followUpOr(entry, if (items.isEmpty()) "Kept" else reader.reply(items))
+    }
+
+    /** "Sam and Jo" to "Who was it with?": kept on the item asked about, then the next question, if any. */
+    private suspend fun Turn.addDetail(prompt: Prompt, answer: String): Boolean {
+        val (_, index, detail) = prompt.field!!.split(":", limit = 3)
+        val entry = withContext(Dispatchers.IO) { data.getDataPoint(prompt.entryId!!) }?.let(Entry::from) ?: return false
+        val i = index.toIntOrNull()?.takeIf { it in entry.items.indices } ?: return false
+        val filled = Day.fill(entry.items[i], detail, answer, reader) ?: return false
+        val items = entry.items.toMutableList().also { it[i] = filled }
+        val updated = entry.copy(words = entry.words.trimEnd('.', ' ') + ". " + answer, items = items)
+        withContext(Dispatchers.IO) { data.saveDataPoint(updated.toDataPoint()) }
+        val next = PromptRules.followUp(updated, prompt.round + 1) ?: return true.also { reply("Got it") }
+        askPrompt("Got it. ${next.text}", next)
+        return true
     }
 
     /**
@@ -175,10 +196,13 @@ object LogFocus {
         val done = said ?: return false
         val updated = entry.copy(words = entry.words.trimEnd('.', ' ') + ". " + answer, items = items)
         withContext(Dispatchers.IO) { data.saveDataPoint(updated.toDataPoint()) }
-        reply(done)
+        // A second question, if one's still open ("How many hours?" then "How did you sleep?").
+        val next = PromptRules.followUp(updated, prompt.round + 1) ?: return true.also { reply(done) }
+        askPrompt("$done. ${next.text}", next)
         return true
     }
 
+    private val SKIP = Regex("^(?:skip|no|nope|nah|pass|never mind|nevermind|not sure|don't know|dont know|i don't know|rather not|no thanks|none|nothing)$")
     private val KEEP = Regex("^(?:yes |yeah |ok |okay )?(?:keep(?: it)?|save it|note|as a note|that's right|correct|it's fine)\\b")
     private val AGAIN = Regex("\\b(?:try again|again|retry|start again|wrong|that's wrong)\\b")
 }

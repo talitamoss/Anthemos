@@ -61,9 +61,14 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
                 items += Item("toilet", "wee")
                 continue
             }
+            // Meetings, people, medication, mood, chores... (Day). Some are the whole clause.
+            val (day, whole) = Day.read(clause)
+            items += day
+            if (whole) continue
             val activity = activity(clause)
             if (activity != null) {
-                items += activity
+                // The gym's own reading (Day) is only for its questions.
+                if (items.none { it.kind == "activity" && it.label == activity.label }) items += activity
                 continue
             }
             val drinks = drinks(clause)
@@ -71,6 +76,8 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
                 items += drinks
                 continue
             }
+            // With someone, or cooking: food only when a food is named ("met Sam for lunch" isn't a food).
+            if (day.isNotEmpty() && !FOODS.containsMatchIn(clause)) continue
             val label = foodLabel(clause)
             val isFood = label != null && (food || HAD.containsMatchIn(clause) && FOODS.containsMatchIn(clause) ||
                 FOODS.containsMatchIn(clause) && !VERB_START.containsMatchIn(clause))
@@ -81,7 +88,8 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
         }
         // "I just had lunch": a meal with nothing else said. Not "a coffee with lunch".
         val mealIsWhen = meal != null && items.isNotEmpty() && Regex("\\b(?:for|with|at|during|after|before)\\s+$meal\\b").containsMatchIn(text)
-        if (meal != null && context == null && items.none { it.kind == "food" } && !mealIsWhen) {
+        // "Cooked dinner" asks what was made, not what was had.
+        if (meal != null && context == null && items.none { it.kind == "food" || it.kind == "cooking" } && !mealIsWhen) {
             items.add(0, Item("food", meal, meal = meal))
         }
         return items
@@ -93,6 +101,9 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
         val names = items.map { item ->
             when {
                 item.kind == "activity" && item.minutes != null -> "${item.label}, ${item.minutes} minutes"
+                item.kind == "weight" -> "weight, ${item.details["value"]}"
+                item.kind == "call" -> "call with ${item.label}" + (item.minutes?.let { ", $it minutes" } ?: "")
+                item.kind != "sleep" && item.minutes != null -> "${item.label}, ${item.minutes} minutes"
                 item.ml != null && item.label == "water" -> "${item.ml} ml of water"
                 item.kind == "spend" -> item.label
                 item.kind == "sleep" && item.minutes != null -> "sleep, ${hours(item.minutes)}"

@@ -78,7 +78,9 @@ data class Item(
     /** For a call: the name as it was said ("dad"). */
     val said: String? = null,
     /** Money spent, in dollars. */
-    val amount: Double? = null
+    val amount: Double? = null,
+    /** What else was said or asked for (docs/anthemos-2.md, "A day in detail"): "who", "about", "score", "dose". */
+    val details: Map<String, String> = emptyMap()
 ) {
     fun toMap(): Map<String, Any> = buildMap {
         put("kind", kind)
@@ -90,6 +92,7 @@ data class Item(
         ml?.let { put("ml", it) }
         said?.let { put("said", it) }
         amount?.let { put("amount", it) }
+        if (details.isNotEmpty()) put("details", details)
     }
 
     companion object {
@@ -105,7 +108,9 @@ data class Item(
                 minutes = int("minutes"),
                 ml = int("ml"),
                 said = map["said"]?.toString(),
-                amount = (map["amount"] as? Number)?.toDouble()
+                amount = (map["amount"] as? Number)?.toDouble(),
+                details = (map["details"] as? Map<*, *>).orEmpty().entries
+                    .mapNotNull { (k, v) -> if (k != null && v != null) k.toString() to v.toString() else null }.toMap()
             )
         }
     }

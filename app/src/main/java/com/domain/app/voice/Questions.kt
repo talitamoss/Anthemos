@@ -351,7 +351,7 @@ object Questions {
     private val HOW = Regex("^how (many|much) (.+)$")
     private val DID = Regex("^(?:did|have) (?:i|we) (.+)$")
     private val CALL_VERB = Regex("^(?:call|called|ring|rang|rung|phone|phoned|speak to|spoke to|spoken to|talk to|talked to|talk with|talked with)\\b")
-    private val LEADING = Regex("^(?:(?:have|had|eat|ate|eaten|drink|drank|drunk|go for|went for|gone for|go to|went to|been to|do|did|done|a|an|some|any|the|my)\\s+)+")
+    private val LEADING = Regex("^(?:(?:have|had|eat|ate|eaten|drink|drank|drunk|go for|went for|gone for|go to|went to|been to|do|did|done|take|took|taken|feel|felt|a|an|some|any|the|my)\\s+)+")
     private val PERIOD = Regex(
         "\\b(today|this morning|tonight|last night|yesterday|this week|last week|this month|last month|this year|" +
             "(?:in )?the (?:last|past) (?:${Numbers.PATTERN}) (?:days?|weeks?|months?))\\b"

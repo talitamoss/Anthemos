@@ -2,6 +2,7 @@
 package com.domain.app.prompts
 
 import com.domain.app.calendar.Event
+import com.domain.app.voice.Day
 import com.domain.app.voice.Entry
 import com.domain.app.voice.Item
 import java.time.Instant
@@ -19,7 +20,9 @@ data class Prompt(
     /** For a follow-up: what the answer fills in: "minutes", "amount", "what" (a meal), "sleep" or "how". */
     val field: String? = null,
     /** Minutes the phone already knows (estimated sleep), used if the answer gives none. */
-    val minutes: Int? = null
+    val minutes: Int? = null,
+    /** Which follow-up this is for its entry: at most two are asked. */
+    val round: Int = 1
 )
 
 /** One time a prompt was asked, and whether it was answered. */
@@ -41,6 +44,7 @@ interface PromptHistory {
 object PromptRules {
     const val MAX_PER_DAY = 3
     const val FOLLOW_UP = "follow-up"
+    const val MAX_FOLLOW_UPS = 2
     private val FEELING = Regex("\\b(well|badly|bad|good|great|terrible|awful|ok|okay|fine|rough|restless|deep|tired|rested|refreshed|broken|light|poorly)\\b")
     /** All prompts after events share this id for counting and stopping. */
     const val EVENT = "event"
@@ -137,11 +141,36 @@ object PromptRules {
             .distinct().size >= 3
 
     /**
-     * One follow-up for a new entry, when an obvious detail is missing:
-     * how long a walk was, how much something bought cost, how many hours
-     * of sleep.
+     * A follow-up for an entry, when an obvious detail is missing: how long
+     * a walk was, how much something bought cost, how many hours of sleep,
+     * who a meeting was with (docs/anthemos-2.md, "A day in detail"). At
+     * most two per entry: [round] is which this would be.
      */
-    fun followUp(entry: Entry): Prompt? {
+    fun followUp(entry: Entry, round: Int = 1): Prompt? {
+        if (round > MAX_FOLLOW_UPS) return null
+        return usual(entry)?.copy(round = round) ?: dayFollowUp(entry, round)
+    }
+
+    /** The questions of the rest of a day: the first item with a detail missing. */
+    private fun dayFollowUp(entry: Entry, round: Int): Prompt? {
+        val spent = entry.items.any { it.kind == "spend" }
+        // "Spent $40": on what?
+        if (spent && entry.items.all { it.kind == "spend" } && !Regex("\\b(?:on|for|at)\\b").containsMatchIn(entry.words.lowercase())) {
+            val i = entry.items.indexOfFirst { it.kind == "spend" && it.details["what"] == null }
+            if (i >= 0) return Prompt(FOLLOW_UP, "What on?", entryId = entry.id, field = "detail:$i:what", round = round)
+        }
+        entry.items.forEachIndexed { i, item ->
+            val ask = Day.nextAsk(item) ?: return@forEachIndexed
+            if (ask.detail == "amount") {
+                if (spent) return@forEachIndexed
+                return Prompt(FOLLOW_UP, ask.question, entryId = entry.id, field = "amount", round = round)
+            }
+            return Prompt(FOLLOW_UP, ask.question, entryId = entry.id, field = "detail:$i:${ask.detail}", round = round)
+        }
+        return null
+    }
+
+    private fun usual(entry: Entry): Prompt? {
         val words = entry.words.lowercase()
         val activity = entry.items.firstOrNull { it.kind == "activity" && it.minutes == null }
         val sleep = entry.items.firstOrNull { it.kind == "sleep" && it.minutes == null }

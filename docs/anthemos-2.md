@@ -88,7 +88,7 @@ Planned (Tal, 2026-11-18): someone should be able to record their day in great d
 | Meetings and events | Proton link, own calendar | built |
 | Weather that day | Open-Meteo | built, as an answer only |
 
-**What has to be said**, and the follow-up when a detail is missing. At most two follow-ups per entry, each only if the detail wasn't said; "skip" or no answer ends it. Status: **built** (recognised and asked), **logged** (recognised, no follow-up yet), **new** (kept only as a note today).
+**What has to be said**, and the follow-up when a detail is missing. Read by `voice/Day.kt` (2.20); at most two follow-ups per entry (`PromptRules.followUp`), each only if the detail wasn't said; "skip" or no answer ends it. Status: **built** (recognised and asked), **logged** (recognised, no follow-up yet), **new** (kept only as a note today).
 
 | Said | Follow-up | Then | Status |
 |---|---|---|---|
@@ -97,35 +97,35 @@ Planned (Tal, 2026-11-18): someone should be able to record their day in great d
 | Went to bed | | | logged |
 | A walk, run, swim, gym, yoga, nap with no time | How long for? | | built |
 | A walk, run or ride | How long for? | How far? | new (distance) |
-| Gym or a workout | How long for? | What did you work on? | new (the second) |
-| A sport ("played tennis") | How long for? | Who with? | new |
+| Gym or a workout | How long for? | What did you work on? | built |
+| A sport ("played tennis") | How long for? | Who with? | built |
 | Spending with no amount | How much was it? | | built |
-| Spending with no thing ("spent $40") | What on? | | new |
+| Spending with no thing ("spent $40") | What on? | | built |
 | Coffee, tea, food, water, alcohol | (alcohol with no count) How many? | | logged; new (count) |
 | Water with no amount | How many glasses? | | new |
 | Poo or wee | | | logged |
-| Medication, vitamins | What did you take? | How much? | new |
-| Pain, headache, feeling sick | How bad, out of ten? | Where? (pain) | new |
-| Period started or ended | Light, medium or heavy? | | new |
-| Weight | | | new |
-| Mood ("feeling flat", "great day") | Out of ten? | Anything behind it? | new |
-| Energy, stress, anxiety | Out of ten? | | new |
-| Grateful for | | | new |
-| A dream | | | new |
-| Saw someone ("caught up with Sam") | How was it? | | new |
-| Saw someone with no name ("met a friend") | Who was it? | How was it? | new |
-| A meeting | Who was it with? | What was it about? | new |
-| A call not made through Anthemos | Who was it with? | Anything to remember? | new |
-| Worked, or worked on something | How long for? | On what? | new |
-| A task done ("finished the report") | | | new |
-| Studied or read | What was it? | How long for? | new |
-| Watched or listened to something | What was it? | | new |
-| Cooked | What did you make? | | new |
-| Groceries | How much did it come to? | | new |
-| Chores: cleaning, laundry, dishes | | | new |
-| Watered plants, fed or walked the pet | | | new |
-| Time outside, in the sun | How long for? | | new |
-| Sex | (never asked) | | new |
+| Medication, vitamins | What did you take? | How much? | built |
+| Pain, headache, feeling sick | How bad, out of ten? | Where? (pain) | built |
+| Period started or ended | Light, medium or heavy? | | built |
+| Weight | | | built |
+| Mood ("feeling flat", "great day") | Out of ten? | Anything behind it? | built |
+| Energy, stress, anxiety | Out of ten? | | built |
+| Grateful for | | | built |
+| A dream | | | built |
+| Saw someone ("caught up with Sam") | How was it? | | built |
+| Saw someone with no name ("met a friend") | Who was it? | How was it? | built |
+| A meeting | Who was it with? | What was it about? | built |
+| A call not made through Anthemos | Who was it with? | Anything to remember? | built |
+| Worked, or worked on something | How long for? | On what? | built |
+| A task done ("finished the report") | | | built |
+| Studied or read | What was it? | How long for? | built |
+| Watched or listened to something | What was it? | | built |
+| Cooked | What did you make? | | built |
+| Groceries | How much did it come to? | | built |
+| Chores: cleaning, laundry, dishes | | | built |
+| Watered plants, fed or walked the pet | | | built |
+| Time outside, in the sun | How long for? | | built |
+| Sex | (never asked) | | built |
 
 **Prompts from what the phone noticed** (planned): after a long call outside Anthemos, "Anything to remember from the call with X?"; in the evening, for a stay at a place with no name, "What were you doing at <street>?"; on a day with few steps and no activity said, the existing "Get outside or move today?".
 
@@ -266,6 +266,13 @@ updates"; Speak's Settings button shows a dot when an update is ready.
 **2.19:** The toilet is logged ("I did a poo", "just had a wee"; kind
 `toilet`), so "when did I last poo" answers. "Hey Holly" is heard as Hey
 Polly, only after "hey", so "Holly called" stays someone.
+
+**2.20:** The rest of a day (`voice/Day.kt`, "A day in detail" above):
+meetings, people seen, calls outside Anthemos, medication, symptoms,
+period, weight, mood, energy, work, tasks, study and reading, what was
+watched, cooking, groceries, chores, time outside, sports, dreams,
+gratitude. What was said is read into the item's details (who, about,
+score, dose); up to two follow-ups ask what's missing; "skip" ends them.
 
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 
