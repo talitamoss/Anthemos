@@ -274,6 +274,13 @@ watched, cooking, groceries, chores, time outside, sports, dreams,
 gratitude. What was said is read into the item's details (who, about,
 score, dose); up to two follow-ups ask what's missing; "skip" ends them.
 
+**2.21:** Settings has a **Connections** section
+(`ui/settings/sections/ConnectionsSettings.kt`): Kronk (tap to sign in in
+the browser; tap again to disconnect, which unlinks the phone on Kronk and
+stops live sharing), Home Assistant, Proton Calendar (paste the share
+link), screen time and location (each opens the phone's setting), and what
+needs nothing: music, the Clock, the weather.
+
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 
 **What the phone already knows** (opt-in, each one separately):

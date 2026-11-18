@@ -175,6 +175,21 @@ class Kronk(private val context: Context) {
         return true
     }
 
+    /** Who this phone is linked as ("tal"), once connected. */
+    val account: String? get() = prefs.getString(ACCOUNT, null)
+
+    /** Unlinks this phone on Kronk (its shares stop there too), then forgets the sign-in. */
+    fun disconnect() {
+        val link = prefs.getString(LINK_ID, null)
+        if (link != null) {
+            runCatching {
+                val request = Request.Builder().url("$server/api/v1/anthemos/links/$link").delete()
+                authorise(request).build().let(http::newCall).execute().close()
+            }
+        }
+        forget()
+    }
+
     fun stopSharing(shareId: String) {
         val request = Request.Builder().url("$server/api/v1/map/live/$shareId").delete()
         authorise(request).build().let(http::newCall).execute().close()
