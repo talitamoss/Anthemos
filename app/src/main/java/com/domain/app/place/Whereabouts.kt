@@ -35,7 +35,7 @@ sealed class Whereabouts {
             if (TRAIL_ON.matches(text)) return Trail(true)
             if (TRAIL_OFF.matches(text)) return Trail(false)
             STOP.matchEntire(text)?.let { m -> return StopSharing(m.groupValues[1].trim().ifEmpty { null }) }
-            SHARE.firstNotNullOfOrNull { it.matchEntire(text) }?.let { m -> return share(m.groupValues[1], m.groupValues[2], now) }
+            SHARE.firstNotNullOfOrNull { it.matchEntire(text.replace(ON_KRONK, "")) }?.let { m -> return share(m.groupValues[1], m.groupValues[2], now) }
             NAME.firstNotNullOfOrNull { it.matchEntire(text) }?.let { m ->
                 val name = m.groupValues[1].trim().removePrefix("called ").trim()
                 if (name.isNotEmpty() && name.split(" ").size <= 4) return Name(name)
@@ -90,10 +90,12 @@ sealed class Whereabouts {
         private val WHERE_WAS = Regex("^where (?:was i|have i been|did i go)(.*)$")
         private val TRAIL_ON = Regex("^(?:start|turn on|switch on|keep) (?:tracking|my trail|the trail|location|my location|tracking me|tracking my location)$|^track (?:me|my location|where i go)$")
         private val TRAIL_OFF = Regex("^(?:stop|turn off|switch off|pause) (?:tracking|my trail|the trail|location|tracking me|tracking my location)$|^don't track (?:me|my location)$")
-        private val STOP = Regex("^stop sharing(?: my (?:live )?location)?(?: with (.+))?$")
+        private val STOP = Regex("^stop sharing(?: my)?(?: live)?(?: location| tracking| position)?(?: with (.+?))?(?: on kronk| through kronk| via kronk)?$")
+        /** "...on Kronk": where it goes, not part of a name. */
+        private val ON_KRONK = Regex("\\s+(?:on|through|via|using) kronk\\b")
         // The name is always group 1 and how long group 2.
         private val SHARE = listOf(
-            Regex("^(?:share|send) (?:my )?(?:live )?location (?:with|to) (.+?)( (?:for|until|till|til) .+)?$"),
+            Regex("^(?:share|send|start) (?:my )?(?:live )?(?:location|tracking|position|whereabouts|where i am) (?:with|to|for) (.+?)( (?:for|until|till|til) .+)?$"),
             Regex("^let (.+?) (?:see|know) where i am( (?:for|until|till|til) .+)?$")
         )
         private val NAME = listOf(

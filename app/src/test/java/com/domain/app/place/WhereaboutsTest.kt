@@ -57,6 +57,12 @@ class WhereaboutsTest {
         assertEquals(listOf("dad"), five.names)
         assertEquals(17, five.until.hour)
 
+        val jye = where("share live tracking with Jye on Kronk") as Whereabouts.Share
+        assertEquals(listOf("jye"), jye.names)
+        assertEquals(now.plusHours(1), jye.until)
+        assertEquals(listOf("jye"), (where("share my location with Jye on Kronk for two hours") as Whereabouts.Share).names)
+        assertEquals(Whereabouts.StopSharing("jye"), where("stop sharing live tracking with Jye"))
+
         val long = where("share my location with Ana for 30 hours") as Whereabouts.Share
         assertEquals(now.plusHours(24), long.until)
     }
