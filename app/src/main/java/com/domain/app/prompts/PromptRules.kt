@@ -16,7 +16,7 @@ data class Prompt(
     val context: String? = null,
     /** For a follow-up: the entry the answer adds to. */
     val entryId: String? = null,
-    /** For a follow-up: what the answer fills in, "minutes" or "amount". */
+    /** For a follow-up: what the answer fills in: "minutes", "amount", "what" (a meal), "sleep" or "how". */
     val field: String? = null,
     /** Minutes the phone already knows (estimated sleep), used if the answer gives none. */
     val minutes: Int? = null
@@ -41,6 +41,7 @@ interface PromptHistory {
 object PromptRules {
     const val MAX_PER_DAY = 3
     const val FOLLOW_UP = "follow-up"
+    private val FEELING = Regex("\\b(well|badly|bad|good|great|terrible|awful|ok|okay|fine|rough|restless|deep|tired|rested|refreshed|broken|light|poorly)\\b")
     /** All prompts after events share this id for counting and stopping. */
     const val EVENT = "event"
     val QUIET_FROM: LocalTime = LocalTime.of(21, 0)
@@ -146,10 +147,20 @@ object PromptRules {
         val sleep = entry.items.firstOrNull { it.kind == "sleep" && it.minutes == null }
         val bought = Regex("\\b(bought|ordered|takeaway|paid|spent|got .+ from)\\b").containsMatchIn(words) &&
             entry.items.none { it.kind == "spend" }
+        // "I just had lunch": what was it?
+        val mealOnly = entry.items.firstOrNull { it.kind == "food" && it.meal != null && it.label == it.meal }
+        // "I've woken up", with no hours said.
+        val woke = entry.items.any { it.kind == "wake" } && entry.items.none { it.kind == "sleep" }
+        // Hours said, but not how it was.
+        val sleptHow = entry.items.any { it.kind == "sleep" && it.minutes != null } &&
+            !FEELING.containsMatchIn(words) && entry.prompt == null
         return when {
             activity != null -> Prompt(FOLLOW_UP, "How long was the ${activity.label}?", entryId = entry.id, field = "minutes")
             sleep != null -> Prompt(FOLLOW_UP, "How many hours did you get?", entryId = entry.id, field = "minutes")
             bought -> Prompt(FOLLOW_UP, "How much was it?", entryId = entry.id, field = "amount")
+            mealOnly != null -> Prompt(FOLLOW_UP, "What did you have?", mealOnly.meal, entryId = entry.id, field = "what")
+            woke -> Prompt(FOLLOW_UP, "How many hours did you sleep?", "sleep", entryId = entry.id, field = "sleep")
+            sleptHow -> Prompt(FOLLOW_UP, "How did you sleep?", "sleep", entryId = entry.id, field = "how")
             else -> null
         }
     }

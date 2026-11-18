@@ -72,6 +72,9 @@ class PromptRulesTest {
         assertNull(PromptRules.followUp(entry(at(10), Item("activity", "walk", minutes = 30))))
         val bought = Entry("b", Instant.now(), "bought lunch from the bakery", listOf(Item("food", "lunch")), "t")
         assertEquals("amount", PromptRules.followUp(bought)?.field)
+        assertEquals("What did you have?", PromptRules.followUp(entry(at(13), Item("food", "lunch", meal = "lunch")))?.text)
+        assertEquals("sleep", PromptRules.followUp(entry(at(7), Item("wake", "woke up")))?.field)
+        assertEquals("How did you sleep?", PromptRules.followUp(entry(at(7), Item("sleep", "sleep", minutes = 480)))?.text)
     }
 
     @Test

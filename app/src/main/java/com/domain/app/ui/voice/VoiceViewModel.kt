@@ -74,7 +74,9 @@ data class VoiceUiState(
     /** Something was just kept or changed, so Undo is offered. */
     val canUndo: Boolean = false,
     /** A change that fits more than one entry, waiting for which. */
-    val choosing: Changes.Outcome.Choose? = null
+    val choosing: Changes.Outcome.Choose? = null,
+    /** Words that didn't make sense, waiting for "keep it" or another try. */
+    val unsure: VoiceRequest.Record? = null
 )
 
 data class PendingCall(val match: Contacts.Match, val said: String)
@@ -138,10 +140,10 @@ class VoiceViewModel @Inject constructor(
         listener.start(object : Listener.Callbacks {
             override fun onListening() = Unit
             override fun onPartial(text: String) = _state.update { it.copy(heard = text) }
-            override fun onHeard(text: String) {
+            override fun onHeard(text: String, unclear: Boolean) {
                 voice = true
                 _state.update { it.copy(heard = text) }
-                handle(text)
+                handle(text, unclear)
             }
             override fun onError(message: String) {
                 _state.update { it.copy(phase = phaseFor(it), reply = message, pendingName = null, prompt = null) }
@@ -198,7 +200,18 @@ class VoiceViewModel @Inject constructor(
 
     fun undo() = viewModelScope.launch { undoLast() }
 
-    private fun handle(text: String) {
+    private fun handle(text: String, unclear: Boolean = false) {
+        _state.value.unsure?.let { doubtful ->
+            _state.update { it.copy(unsure = null) }
+            val lower = text.lowercase().trim()
+            when {
+                KEEP.containsMatchIn(lower) -> viewModelScope.launch { record(doubtful) }
+                lower in NO || AGAIN.containsMatchIn(lower) -> retry()
+                // Anything else is the second try.
+                else -> handle(text, unclear)
+            }
+            return
+        }
         _state.value.pendingEvent?.let { event ->
             val lower = text.lowercase()
             when {
@@ -233,6 +246,10 @@ class VoiceViewModel @Inject constructor(
         }
 
         val request = parser.parse(text)
+        if (request is VoiceRequest.Record && doubtful(request, unclear)) {
+            askUnsure(request)
+            return
+        }
         val prompt = freshPrompt()
         _state.update { it.copy(prompt = null) }
         // Only something to keep answers a prompt: "call dad" or a question is still that.
@@ -342,6 +359,38 @@ class VoiceViewModel @Inject constructor(
         speakThen(question) { if (_state.value.prompt == next) listen() }
     }
 
+    /**
+     * Words worth checking before they're kept: nothing found in them, and
+     * either the recogniser wasn't sure, or they sound like they were meant
+     * to be something ("I have a thief").
+     */
+    private fun doubtful(request: VoiceRequest.Record, unclear: Boolean): Boolean {
+        if (request.items.isNotEmpty()) return false
+        // An answer to a question is read with what was asked; don't second-guess it.
+        if (freshPrompt() != null) return false
+        return unclear || MEANT_SOMETHING.containsMatchIn(request.transcript.lowercase())
+    }
+
+    private fun askUnsure(request: VoiceRequest.Record) {
+        val question = "I'm not sure I got that. Try again, or keep it as a note?"
+        _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, unsure = request) }
+        speakThen(question) { if (_state.value.unsure == request) listen() }
+    }
+
+    /** "Keep as note", tapped. */
+    fun keepUnsure() {
+        val request = _state.value.unsure ?: return
+        listener.cancel()
+        _state.update { it.copy(unsure = null) }
+        viewModelScope.launch { record(request) }
+    }
+
+    /** "Try again", tapped or said. */
+    fun retry() {
+        _state.update { it.copy(unsure = null, reply = "") }
+        listen()
+    }
+
     /** The waiting prompt, if it was asked in the last few minutes. */
     private fun freshPrompt(): Prompt? =
         _state.value.prompt?.takeIf { Instant.now().isBefore(promptAt.plusSeconds(PROMPT_MINUTES * 60)) }
@@ -351,7 +400,8 @@ class VoiceViewModel @Inject constructor(
         val text = request.transcript
         if (prompt.entryId != null) {
             // "Forty minutes" fills in the walk; "I had a coffee" is something new.
-            val ownThings = request.items.any { it.kind != "spend" }
+            // "What did you have?" and "How did you sleep?" are answered with things; the rest aren't.
+            val ownThings = prompt.field !in setOf("what", "how") && request.items.any { it.kind != "spend" && it.kind != "sleep" }
             if (ownThings || !addTo(prompt, text)) record(request)
             return
         }
@@ -387,6 +437,21 @@ class VoiceViewModel @Inject constructor(
                 items += it
                 said = "Added, ${it.label}"
             }
+            // "What did you have?" after "I had lunch": the food takes the meal's place.
+            "what" -> {
+                val food = reader.read(answer, prompt.context).filter { it.kind == "food" || it.kind == "drink" }
+                if (food.isNotEmpty()) {
+                    items.removeAll { it.kind == "food" && it.label == it.meal }
+                    items += food
+                    said = reader.reply(food)
+                }
+            }
+            "sleep" -> reader.duration(answer, bareIsHours = true)?.let { minutes ->
+                items += Item("sleep", "sleep", minutes = minutes)
+                said = "Added, ${minutes / 60.0} hours".replace(".0 ", " ")
+            }
+            // "How did you sleep?": the words are the answer.
+            "how" -> if (answer.isNotBlank()) said = "Noted"
         }
         if (said == null) return false
         val updated = entry.copy(words = entry.words.trimEnd('.', ' ') + ". " + answer, items = items)
@@ -554,6 +619,10 @@ class VoiceViewModel @Inject constructor(
 
     companion object {
         private const val PROMPT_MINUTES = 3L
+        private val KEEP = Regex("^(?:yes |yeah |ok |okay )?(?:keep(?: it)?|save it|note|as a note|that's right|correct|it's fine)\\b")
+        private val AGAIN = Regex("\\b(?:try again|again|retry|start again|wrong|that's wrong)\\b")
+        // Sounds like something eaten or drunk, so a note with nothing found in it is worth checking.
+        private val MEANT_SOMETHING = Regex("\\b(?:had|have|having|ate|eaten|eating|drank|drinking|drink)\\b")
         private val YES = listOf("yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do it", "go ahead", "call", "please")
         private val NO = listOf("no", "nope", "nah", "cancel", "don't", "stop", "never mind")
     }

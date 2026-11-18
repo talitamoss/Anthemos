@@ -243,6 +243,13 @@ fun VoiceScreen(
                 OutlinedButton(onClick = { viewModel.confirm(false) }) { Text("No") }
             }
         }
+        if (state.unsure != null) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { viewModel.retry() }) { Text("Try again") }
+                OutlinedButton(onClick = { viewModel.keepUnsure() }) { Text("Keep as note") }
+            }
+        }
         state.choosing?.let { choose ->
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

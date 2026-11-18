@@ -26,7 +26,8 @@ class Listener(private val context: Context) {
     interface Callbacks {
         fun onListening()
         fun onPartial(text: String)
-        fun onHeard(text: String)
+        /** [unclear] is true when the recogniser wasn't confident of several words. */
+        fun onHeard(text: String, unclear: Boolean)
         fun onError(message: String)
     }
 
@@ -99,7 +100,9 @@ class Listener(private val context: Context) {
      * Stale callbacks from an old turn are ignored.
      */
     private inner class Session(model: Model, private val callbacks: Callbacks) : RecognitionListener {
-        private val recognizer = Recognizer(model, SAMPLE_RATE)
+        private val recognizer = Recognizer(model, SAMPLE_RATE).apply { setWords(true) }
+        /** How sure Vosk was of each word heard. */
+        private val confidence = mutableListOf<Double>()
         private val service = SpeechService(recognizer, SAMPLE_RATE)
         private var done = false
         private val said = mutableListOf<String>()
@@ -142,6 +145,7 @@ class Listener(private val context: Context) {
         override fun onResult(hypothesis: String?) {
             if (done) return
             text(hypothesis, "text")?.let { said += it }
+            keepConfidence(hypothesis)
             if (said.isNotEmpty()) {
                 callbacks.onPartial(said.joinToString(" "))
                 main.removeCallbacks(quiet)
@@ -152,7 +156,19 @@ class Listener(private val context: Context) {
         override fun onFinalResult(hypothesis: String?) {
             if (done) return
             text(hypothesis, "text")?.let { said += it }
+            keepConfidence(hypothesis)
             if (said.isNotEmpty()) heard(said.joinToString(" ")) else fail("I didn't catch that")
+        }
+
+        private fun keepConfidence(json: String?) {
+            val words = json?.let { runCatching { JSONObject(it).optJSONArray("result") }.getOrNull() } ?: return
+            for (i in 0 until words.length()) words.optJSONObject(i)?.optDouble("conf")?.let { confidence += it }
+        }
+
+        /** Two or more doubtful words, or doubtful on the whole. */
+        private fun unclear(): Boolean {
+            if (confidence.isEmpty()) return false
+            return confidence.count { it < 0.6 } >= 2 || confidence.average() < 0.8
         }
 
         override fun onError(exception: Exception?) {
@@ -165,8 +181,9 @@ class Listener(private val context: Context) {
         }
 
         private fun heard(text: String) {
+            val unclear = unclear()
             release()
-            callbacks.onHeard(text)
+            callbacks.onHeard(text, unclear)
         }
 
         private fun fail(message: String) {
