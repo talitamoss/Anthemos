@@ -17,6 +17,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Hey Poly (docs/anthemos-2.md): listening for one phrase, and opening
+         Speak from the background when it's heard. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- Anthemos 2.0: find a contact by name and call them, after a yes -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -83,6 +87,15 @@
             android:name=".place.LocationService"
             android:exported="false"
             android:foregroundServiceType="location" />
+        <service
+            android:name=".voice.WakeService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <receiver android:name=".voice.WakeOnBoot" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".update.UpdateReceiver" android:exported="false" />
         <receiver android:name=".prompts.PromptActionReceiver" android:exported="false" />
         <receiver android:name=".calendar.ReminderReceiver" android:exported="false" />

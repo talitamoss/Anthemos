@@ -9,7 +9,6 @@ import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
-import java.io.File
 import java.util.concurrent.Executors
 
 /**
@@ -33,7 +32,7 @@ class Listener(private val context: Context) {
 
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private var model: Model? = null
+    private var model: Model? = SpeechModel.loaded
     private var loading = false
     private var loadFailed = false
     private var waiting: Callbacks? = null
@@ -45,7 +44,7 @@ class Listener(private val context: Context) {
         loading = true
         loadFailed = false
         worker.execute {
-            val loaded = runCatching { Model(unpack().absolutePath) }
+            val loaded = runCatching { SpeechModel.get(context) }
             main.post {
                 loading = false
                 loaded.onSuccess { model = it }.onFailure { loadFailed = true }
@@ -89,7 +88,7 @@ class Listener(private val context: Context) {
     fun shutdown() {
         cancel()
         worker.shutdown()
-        model?.close()
+        // The model is shared with Hey Poly (SpeechModel) and stays loaded.
         model = null
     }
 
@@ -111,6 +110,8 @@ class Listener(private val context: Context) {
         private val silent = Runnable { finish() }
 
         fun begin() {
+            // Hey Poly lets go of the microphone while this turn has it.
+            WakeService.appListening = true
             service.startListening(this, TIMEOUT_MS)
             main.postDelayed(silent, SILENT_MS)
             callbacks.onListening()
@@ -130,6 +131,7 @@ class Listener(private val context: Context) {
             service.shutdown()
             recognizer.close()
             if (session === this) session = null
+            WakeService.appListening = false
         }
 
         override fun onPartialResult(hypothesis: String?) {
@@ -192,28 +194,6 @@ class Listener(private val context: Context) {
         }
     }
 
-    /** Copies the model out of the APK once; a marker says the copy finished. */
-    private fun unpack(): File {
-        val dir = File(context.filesDir, MODEL_NAME)
-        val marker = File(dir, ".ready")
-        if (marker.exists()) return dir
-        dir.deleteRecursively()
-        copyAsset(MODEL_ASSET, dir)
-        marker.writeText(MODEL_NAME)
-        return dir
-    }
-
-    private fun copyAsset(path: String, to: File) {
-        val children = context.assets.list(path).orEmpty()
-        if (children.isEmpty()) {
-            to.parentFile?.mkdirs()
-            context.assets.open(path).use { input -> to.outputStream().use { input.copyTo(it) } }
-        } else {
-            to.mkdirs()
-            children.forEach { copyAsset("$path/$it", File(to, it)) }
-        }
-    }
-
     private fun text(json: String?, key: String): String? =
         json?.let { runCatching { JSONObject(it).optString(key) }.getOrNull() }?.trim()?.takeIf { it.isNotEmpty() }
 
@@ -224,8 +204,5 @@ class Listener(private val context: Context) {
         /** Quiet after speech that ends the turn, on top of Vosk's own short pause. */
         private const val QUIET_MS = 1_800L
         private const val SILENT_MS = 8_000L
-        /** Fetched at build time by the fetchVoskModel task in app/build.gradle.kts. */
-        private const val MODEL_ASSET = "model-en-us"
-        private const val MODEL_NAME = "vosk-model-small-en-us-0.15"
     }
 }

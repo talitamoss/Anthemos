@@ -19,7 +19,7 @@ android {
         // CI numbers each build so the in-app updater can tell newer from older.
         val build = System.getenv("ANTHEMOS_BUILD")?.toInt() ?: 3
         versionCode = build
-        versionName = "2.0.0-alpha13 (build $build)"
+        versionName = "2.0.0-alpha14 (build $build)"
 
         // Phones only: keeps the speech engine's native code to one copy.
         ndk { abiFilters += listOf("arm64-v8a") }

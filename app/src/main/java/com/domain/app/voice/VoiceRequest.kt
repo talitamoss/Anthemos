@@ -81,6 +81,9 @@ sealed class VoiceRequest {
         val ask: com.domain.app.place.Whereabouts
     ) : VoiceRequest()
 
+    /** Hey Poly on or off. */
+    data class Wake(override val transcript: String, val on: Boolean) : VoiceRequest()
+
     /** Take back the last entry. */
     data class Undo(override val transcript: String) : VoiceRequest()
 }

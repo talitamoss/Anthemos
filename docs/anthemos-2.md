@@ -27,6 +27,14 @@ Fixed kinds (Food, Water, Caffeine...) lock us in: a sentence holds several thin
 
 Not on a big model on the phone, and not on a server we run for everyone: on **each person's own server**, the same one that holds their pod. Hosting and setting that up is the service people pay for. The phone does what it can alone (speech, rules, simple questions) and sends the rest to its owner's server: Whisper for harder speech, a language model as the better reader and for harder questions. No one else's server sees the words.
 
+## Hey Poly
+
+"Start listening for Hey Poly" turns on listening for one phrase, all the time, until "stop listening for Hey Poly" (`voice/WakeService.kt`, `focus/WakeFocus.kt`). On hearing it, a short tone, and Speak opens listening, over the lock screen if need be. "Anthemos" isn't a word the speech model knows, so the phrase is Hey Poly (also heard as Polly, Pauly, Paulie).
+
+- **Nothing is kept or sent.** Audio is only checked for the phrase, on the phone, by the same Vosk model Speak uses (loaded once for both, `voice/SpeechModel.kt`).
+- **Light on battery:** each fifth of a second is measured first, and only sound louder than the room's own noise goes to the recogniser (`SoundGate`), which knows only the phrase. It lets go of the microphone during calls, on battery saver, below 15% (unless charging), and while Speak is listening.
+- **Android's limits:** a foreground service with a notification, and GrapheneOS's microphone dot, while it runs. It can only take the microphone while Anthemos is on screen, so after a restart a notification asks for one tap. Opening Speak from the background needs "Display over other apps", asked for when it's turned on; without it, hearing the phrase shows a "Tap to talk" notification.
+
 ## Commands
 
 Everything Anthemos understands is organised by focus, so what it does can be read in one place:
@@ -149,6 +157,8 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 **alpha 11:** nothing is a note unless asked for ("take a note", "note to self", "remember", "write down", "dear diary"). Anything else with nothing found in it asks "Try again, or keep it as a note?"; something found in words the recogniser wasn't sure of asks "log coffee? Say yes, or try again."
 
 **alpha 12:** places and the trail, and live location through Kronk (above, Places and Kronk).
+
+**alpha 14:** Hey Poly (above).
 
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 

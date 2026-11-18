@@ -94,7 +94,7 @@ class RuleParser(
 
     companion object {
         internal val UNDO = setOf("undo", "undo that", "take that back", "delete that", "scratch that", "cancel that", "remove that")
-        private val POLITE = Regex("^(?:(?:hey|ok|okay)\\s+)?(?:anthemos\\s+)?(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|i want to\\s+|i'd like to\\s+|i need to\\s+)*")
+        private val POLITE = Regex("^(?:(?:hey|ok|okay)\\s+)?(?:(?:anthemos|poly|polly|pauly|paulie)\\s+)?(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|i want to\\s+|i'd like to\\s+|i need to\\s+)*")
 
         // How "call" gets heard. These alone don't make a call: if no
         // contact matches, the words are kept instead.

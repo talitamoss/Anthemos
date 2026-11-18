@@ -57,7 +57,7 @@ jobs:
           # What the in-app updater reads (update/Updater.kt).
           if [ "${GITHUB_REF_NAME}" = "anthemos-2" ]; then
             SHA=$(sha256sum app/build/outputs/apk/debug/${APK_NAME} | cut -d' ' -f1)
-            printf '{"versionCode":%s,"versionName":"2.0.0-alpha13 (build %s)","apk":"%s","sha256":"%s"}\n' \
+            printf '{"versionCode":%s,"versionName":"2.0.0-alpha14 (build %s)","apk":"%s","sha256":"%s"}\n' \
               "$ANTHEMOS_BUILD" "$ANTHEMOS_BUILD" "$APK_NAME" "$SHA" > app/build/outputs/apk/debug/anthemos2-latest.json
           fi
 

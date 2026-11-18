@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.domain.app.kronk.KronkInbox
+import com.domain.app.voice.WakeService
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.ui.components.navigation.AnthemosBottomBar
 import com.domain.app.ui.dashboard.DashboardScreen
@@ -46,8 +47,19 @@ class MainActivity : ComponentActivity() {
         KronkInbox.receive(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Hey Poly can only take the microphone while Anthemos is on screen; after that it keeps it.
+        WakeService.refresh(this)
+    }
+
     private fun noteListen(intent: Intent?) {
         if (intent?.action !in LISTEN_ACTIONS) return
+        // Heard Hey Poly: open over the lock screen, and wake the screen.
+        if (intent?.getBooleanExtra(WakeService.EXTRA_WAKE, false) == true && android.os.Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
         // Opened from a prompt: Speak asks it and listens for the answer.
         PromptInbox.receive(intent)
         listenRequest += 1

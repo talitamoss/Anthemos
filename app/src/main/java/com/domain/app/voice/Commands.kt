@@ -11,6 +11,7 @@ import com.domain.app.focus.PhoneFocus
 import com.domain.app.focus.PlacesFocus
 import com.domain.app.focus.QuestionsFocus
 import com.domain.app.focus.Turn
+import com.domain.app.focus.WakeFocus
 import java.time.ZonedDateTime
 
 /**
@@ -69,7 +70,8 @@ object Commands {
         CallsFocus.focus(parser),
         PhoneFocus.focus(),
         PlacesFocus.focus(),
-        KronkFocus.focus()
+        KronkFocus.focus(),
+        WakeFocus.focus()
     )
 
     /**
@@ -79,7 +81,7 @@ object Commands {
      * is logged.
      */
     val order = listOf(
-        "change.undo", "change.edit",
+        "change.undo", "change.edit", "wake.on", "wake.off",
         "kronk.connect", "places.here", "places.was", "places.trail", "kronk.stop", "kronk.share", "places.name",
         "calendar.add", "calls.call", "calls.teach", "calendar.ask", "phone.ask", "questions.ask",
         "notes.note", "log.record"
