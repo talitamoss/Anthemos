@@ -116,6 +116,8 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 **alpha 10:** more follow-ups: "What did you have?" after a meal with nothing in it, "How many hours did you sleep?" after waking, "How did you sleep?" after hours with no word for how. A check before keeping doubtful words: when nothing is found in them and either the recogniser was unsure of them (Vosk word confidence) or they sound like something eaten or drunk ("I have a thief"), it asks "Try again, or keep it as a note?".
 
+**alpha 11:** nothing is a note unless asked for ("take a note", "note to self", "remember", "write down", "dear diary"). Anything else with nothing found in it asks "Try again, or keep it as a note?"; something found in words the recogniser wasn't sure of asks "log coffee? Say yes, or try again."
+
 **What the phone already knows** (opt-in, each one separately):
 - **Screen time** (alpha 5, `sense/PhoneSense.kt`): from Android's usage access, turned on in Settings from a card on Speak. Android greys out the switch for apps installed outside a store until App info, ⋮, Allow restricted settings; the card says so after the first try, with an App info button. "How much screen time today?" answers with the total and the top three apps; each morning yesterday's total is kept as an entry (source "phone").
 - **Sleep, estimated** (alpha 5): the longest gap in phone use overnight (6 pm to 1 pm, three hours or more; glances under five minutes ignored). The morning prompt says "Phone down at 11:10 pm, up at 6:40 am. How did you sleep?" and keeps those hours if the answer gives none. "How long did I sleep?" answers from it.

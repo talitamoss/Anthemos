@@ -205,7 +205,8 @@ class VoiceViewModel @Inject constructor(
             _state.update { it.copy(unsure = null) }
             val lower = text.lowercase().trim()
             when {
-                KEEP.containsMatchIn(lower) -> viewModelScope.launch { record(doubtful) }
+                KEEP.containsMatchIn(lower) || (doubtful.items.isNotEmpty() && YES.any { Regex("\\b$it\\b").containsMatchIn(lower) }) ->
+                    viewModelScope.launch { record(doubtful) }
                 lower in NO || AGAIN.containsMatchIn(lower) -> retry()
                 // Anything else is the second try.
                 else -> handle(text, unclear)
@@ -360,19 +361,23 @@ class VoiceViewModel @Inject constructor(
     }
 
     /**
-     * Words worth checking before they're kept: nothing found in them, and
-     * either the recogniser wasn't sure, or they sound like they were meant
-     * to be something ("I have a thief").
+     * Everything kept should be something specific; words become a note only
+     * when asked for ("take a note"). So words with nothing found in them,
+     * or that the recogniser wasn't sure of, are checked first.
      */
     private fun doubtful(request: VoiceRequest.Record, unclear: Boolean): Boolean {
-        if (request.items.isNotEmpty()) return false
+        if (request.note) return false
         // An answer to a question is read with what was asked; don't second-guess it.
         if (freshPrompt() != null) return false
-        return unclear || MEANT_SOMETHING.containsMatchIn(request.transcript.lowercase())
+        return request.items.isEmpty() || unclear
     }
 
     private fun askUnsure(request: VoiceRequest.Record) {
-        val question = "I'm not sure I got that. Try again, or keep it as a note?"
+        val question = if (request.items.isEmpty()) {
+            "I'm not sure what to log from that. Try again, or keep it as a note?"
+        } else {
+            "I may have misheard: ${reader.reply(request.items).replaceFirst("Logged", "log")}? Say yes, or try again."
+        }
         _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, unsure = request) }
         speakThen(question) { if (_state.value.unsure == request) listen() }
     }
@@ -569,8 +574,13 @@ class VoiceViewModel @Inject constructor(
         reply("Got it, ${request.alias} is ${match.name}")
     }
 
+    /** Words that turned out not to be a command: read them, and check if nothing's found. */
     private suspend fun keepWords(transcript: String) {
         val items = reader.read(transcript)
+        if (items.isEmpty()) {
+            askUnsure(VoiceRequest.Record(transcript, items, "Noted"))
+            return
+        }
         followUpOr(save(transcript, items, null), reader.reply(items))
     }
 
@@ -621,8 +631,6 @@ class VoiceViewModel @Inject constructor(
         private const val PROMPT_MINUTES = 3L
         private val KEEP = Regex("^(?:yes |yeah |ok |okay )?(?:keep(?: it)?|save it|note|as a note|that's right|correct|it's fine)\\b")
         private val AGAIN = Regex("\\b(?:try again|again|retry|start again|wrong|that's wrong)\\b")
-        // Sounds like something eaten or drunk, so a note with nothing found in it is worth checking.
-        private val MEANT_SOMETHING = Regex("\\b(?:had|have|having|ate|eaten|eating|drank|drinking|drink)\\b")
         private val YES = listOf("yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do it", "go ahead", "call", "please")
         private val NO = listOf("no", "nope", "nah", "cancel", "don't", "stop", "never mind")
     }

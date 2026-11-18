@@ -93,11 +93,15 @@ class RuleParserTest {
     }
 
     @Test
-    fun `anything else is kept as said`() {
+    fun `a note only when asked for`() {
         val r = record("the bus was late again")
         assertTrue(r.items.isEmpty())
         assertEquals("Noted", r.reply)
         assertEquals("the bus was late again", r.transcript)
+        // Nothing found isn't a note unless asked for: the screen checks first.
+        assertFalse(r.note)
+        assertTrue(record("take a note the bus was late again").note)
+        assertTrue(record("note to self call the bank").note)
     }
 
     @Test

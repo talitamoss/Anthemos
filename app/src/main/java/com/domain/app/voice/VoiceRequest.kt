@@ -22,7 +22,9 @@ sealed class VoiceRequest {
          * Parts said with different times ("woke up at 5:30, having a
          * coffee now"), each kept as its own entry. Empty for one entry.
          */
-        val parts: List<Record> = emptyList()
+        val parts: List<Record> = emptyList(),
+        /** Asked for as a note ("take a note..."): kept as words, nothing to find. */
+        val note: Boolean = false
     ) : VoiceRequest()
 
     /**

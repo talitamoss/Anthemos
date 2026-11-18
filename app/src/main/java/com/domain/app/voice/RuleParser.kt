@@ -39,7 +39,7 @@ class RuleParser(
         PhoneQuestion.parse(transcript, today())?.let { return VoiceRequest.AskPhone(transcript, it) }
         Questions.parse(text, today())?.let { return VoiceRequest.Ask(transcript, it) }
 
-        if (NOTE.find(command) != null) return VoiceRequest.Record(transcript, emptyList(), "Noted")
+        if (NOTE.find(command) != null) return VoiceRequest.Record(transcript, emptyList(), "Noted", note = true)
         return record(transcript)
     }
 
@@ -121,6 +121,7 @@ class RuleParser(
 
         private val SPLIT = Regex("\\s*(?:[,;]|\\band then\\b|\\band\\b|\\bthen\\b|\\balso\\b|\\bplus\\b)\\s*", RegexOption.IGNORE_CASE)
         private val CLOCK = java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH)
-        private val NOTE = Regex("^(?:take a note|make a note|note that|note|remember that|remember)\\b")
+        // Only these keep words as a note; anything else should be something specific.
+        private val NOTE = Regex("^(?:take a note|make a note|add a note|note to self|note that|note|remember that|remember|write down|write this down|jot down|journal|diary entry|dear diary)\\b")
     }
 }
