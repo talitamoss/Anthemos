@@ -16,6 +16,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.domain.app.BuildConfig
 import com.domain.app.ui.settings.sections.HeyPolySetting
+import com.domain.app.ui.settings.sections.HomeAssistantSetting
 import com.domain.app.update.UpdateCard
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,6 +75,8 @@ fun SettingsScreen(
         item {
             SettingsSection(title = "Anthemos") {
                 HeyPolySetting()
+                Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                HomeAssistantSetting()
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))
                 UpdateCard(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }

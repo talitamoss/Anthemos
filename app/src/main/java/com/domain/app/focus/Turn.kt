@@ -4,6 +4,7 @@ package com.domain.app.focus
 import android.content.Context
 import com.domain.app.calendar.LinkedCalendar
 import com.domain.app.core.data.DataRepository
+import com.domain.app.home.HomeAssistant
 import com.domain.app.kronk.Kronk
 import com.domain.app.place.LocationState
 import com.domain.app.prompts.Prompt
@@ -31,6 +32,7 @@ interface Turn {
     val kronk: Kronk
     val location: LocationState
     val calendar: LinkedCalendar
+    val home: HomeAssistant
 
     /** Spoken, not typed: replies are said aloud. */
     val voice: Boolean

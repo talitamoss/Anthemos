@@ -1,6 +1,7 @@
 // app/src/main/java/com/domain/app/focus/QuestionsFocus.kt
 package com.domain.app.focus
 
+import com.domain.app.focus.HomeFocus.tryHome
 import com.domain.app.focus.LogFocus.keep
 import com.domain.app.sense.PhoneAnswers
 import com.domain.app.voice.Entry
@@ -41,6 +42,8 @@ object QuestionsFocus {
             ) { request ->
                 // A prompt's answer can sound like a question ("how about seven hours"): kept as an answer.
                 if (prompt != null) return@command keep(parser.record(request.transcript))
+                // The house may know ("is anyone home?").
+                if (tryHome(request.transcript)) return@command
                 reply("I can't answer that yet. I can tell you when you last did something, how many, what you had, and what time.")
             }
         )

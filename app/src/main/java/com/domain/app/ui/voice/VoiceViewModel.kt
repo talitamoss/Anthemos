@@ -15,6 +15,7 @@ import com.domain.app.focus.Choice
 import com.domain.app.focus.KronkFocus.finishConnecting
 import com.domain.app.focus.Turn
 import com.domain.app.focus.Waiting
+import com.domain.app.home.HomeAssistant
 import com.domain.app.kronk.Kronk
 import com.domain.app.kronk.KronkInbox
 import com.domain.app.place.LocationState
@@ -99,6 +100,7 @@ class VoiceViewModel @Inject constructor(
         override val kronk = Kronk(appContext)
         override val location = LocationState(appContext)
         override val calendar = LinkedCalendar(appContext)
+        override val home = HomeAssistant(appContext)
         override var voice = true
         override var unclear = false
         override var prompt: Prompt? = null

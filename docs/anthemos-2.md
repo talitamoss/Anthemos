@@ -84,6 +84,10 @@ Proton Calendar is end-to-end encrypted and doesn't share its events with Androi
 
 Through whichever app plays music on the phone, with the phone's own media controls; nothing to sign in to (`focus/MediaFocus.kt`, `media/Music.kt`). "Play", "pause", "skip", "previous song", "turn it up". "Play Bonobo" hands the words to the music app's search, which plays the best match (the first time, Android may ask which app). Replies are shown, not said, so Polly doesn't talk over the music. "I played tennis" is still something that happened.
 
+## Home
+
+The house, through Home Assistant (`home/HomeAssistant.kt`, `focus/HomeFocus.kt`). Added in Settings: the address used at home or over the VPN (a bare IP gets `http://` and `:8123`), and a long-lived token from Home Assistant's profile page, under Security; checked before it's kept, encrypted. Anthemos only decides the words are for the house ("turn off the lounge lights", "set the heating to 20", "lock the front door", "is the back door locked", "what's the temperature inside") and hands them to Home Assistant's own Assist (`/api/conversation/process`), which knows the devices and rooms, does it, and its answer is said back. Nothing is asked first (Tal's choice). A follow-up within five minutes carries on Assist's conversation. A question nothing else answers is tried on Assist before "I can't answer that yet". Plain http is allowed (`res/xml/network_security_config.xml`) since a home Home Assistant usually has no certificate; the VPN encrypts it away from home.
+
 ## Places
 
 Location stays on the phone. No map service is asked where anything is or what it is called (Tal, 2026-11-18: not OSM's public server).
@@ -182,6 +186,8 @@ link, and adding opens Proton filled in. Music: play, pause, skip, louder,
 features, where the alphas counted before; the build is CI's run count.
 Hey Poly and updates moved from Speak to Settings, with "Check for
 updates"; Speak's Settings button shows a dot when an update is ready.
+
+**2.17:** Home Assistant (above).
 
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 

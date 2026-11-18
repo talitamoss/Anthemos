@@ -93,6 +93,9 @@ sealed class VoiceRequest {
     /** Play, pause, skip, louder. */
     data class Media(override val transcript: String, val music: com.domain.app.media.Music) : VoiceRequest()
 
+    /** For the house: handed to Home Assistant. */
+    data class Home(override val transcript: String) : VoiceRequest()
+
     /** A question nothing answers yet. */
     data class Unanswered(override val transcript: String) : VoiceRequest()
 }

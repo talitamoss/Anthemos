@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Home Assistant on a home network is usually plain http (http://192.168.1.10:8123),
+  reached at home or over the VPN, which encrypts it. Anthemos's own servers are https.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -6,6 +6,7 @@ import com.domain.app.focus.CallsFocus
 import com.domain.app.focus.ChangeFocus
 import com.domain.app.focus.KronkFocus
 import com.domain.app.focus.LogFocus
+import com.domain.app.focus.HomeFocus
 import com.domain.app.focus.MediaFocus
 import com.domain.app.focus.NotesFocus
 import com.domain.app.focus.PhoneFocus
@@ -71,7 +72,8 @@ object Commands {
         PhoneFocus.focus(),
         PlacesFocus.focus(),
         KronkFocus.focus(),
-        MediaFocus.focus()
+        MediaFocus.focus(),
+        HomeFocus.focus()
     )
 
     /**
@@ -82,7 +84,7 @@ object Commands {
      */
     val order = listOf(
         "change.undo", "change.edit",
-        "kronk.connect", "calendar.link", "calendar.unlink", "places.here", "places.was", "places.trail", "kronk.stop", "kronk.share", "media.control", "media.play", "places.name",
+        "kronk.connect", "calendar.link", "calendar.unlink", "places.here", "places.was", "places.trail", "kronk.stop", "kronk.share", "media.control", "media.play", "home.connect", "home.do", "places.name",
         "calendar.add", "calls.call", "calls.teach", "calendar.ask", "phone.ask", "questions.ask", "questions.other",
         "notes.note", "log.record"
     )
