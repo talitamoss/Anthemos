@@ -93,6 +93,15 @@ sealed class VoiceRequest {
     /** Play, pause, skip, louder. */
     data class Media(override val transcript: String, val music: com.domain.app.media.Music) : VoiceRequest()
 
+    /** A timer or an alarm, in the phone's Clock. */
+    data class Clock(override val transcript: String, val clock: com.domain.app.clock.Clock) : VoiceRequest()
+
+    /** The torch, an app, the battery. */
+    data class Device(override val transcript: String, val device: com.domain.app.device.Device) : VoiceRequest()
+
+    /** The forecast. */
+    data class Weather(override val transcript: String, val ask: com.domain.app.weather.WeatherAsk) : VoiceRequest()
+
     /** For the house: handed to Home Assistant. */
     data class Home(override val transcript: String) : VoiceRequest()
 

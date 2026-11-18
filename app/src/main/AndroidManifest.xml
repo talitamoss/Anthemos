@@ -37,10 +37,18 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- Package visibility (Android 11+) for text-to-speech -->
+    <!-- Timers and alarms in the phone's Clock app (focus/ClockFocus.kt) -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <!-- Package visibility (Android 11+): text-to-speech, apps opened by name (focus/DeviceFocus.kt),
+         the Clock app, and music apps' search -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
     

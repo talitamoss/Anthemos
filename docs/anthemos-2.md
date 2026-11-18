@@ -39,7 +39,7 @@ The **Hey Poly** switch in Settings (`ui/settings/sections/HeyPolySetting.kt`) t
 
 Everything Anthemos understands is organised by focus, so what it does can be read in one place:
 
-- A **focus** is one area of what it does, each in its own file in `focus/`: `LogFocus`, `NotesFocus`, `ChangeFocus`, `QuestionsFocus`, `CalendarFocus`, `CallsFocus`, `PhoneFocus`, `PlacesFocus`, `KronkFocus`, `MediaFocus`.
+- A **focus** is one area of what it does, each in its own file in `focus/`: `LogFocus`, `NotesFocus`, `ChangeFocus`, `QuestionsFocus`, `CalendarFocus`, `CallsFocus`, `PhoneFocus`, `PlacesFocus`, `KronkFocus`, `MediaFocus`, `HomeFocus`, `ClockFocus`, `DeviceFocus`, `WeatherFocus`.
 - Each focus lists its **commands**. A command has an id (`calendar.add`), one line on what it does, example sentences, how it is recognised, and what it does then. Everything a focus does sits in its file.
 - **`voice/Commands.kt`** gathers the focuses and holds **one order** in which commands are tried. It crosses focuses on purpose: "remind me to call Dad" is the calendar before it is a call, "this is home" is a place before it is something to log, and anything left is logged.
 - **`focus/Turn.kt`** is what a focus can do while handling one thing said: reply, ask something and wait for the answer (`Waiting`, with buttons as `Choice`s; `confirm` for yes or no), ask a prompt, need location. Speak (`ui/voice/VoiceViewModel.kt`) provides it and does nothing else: listening, replies, questions waiting, prompts.
@@ -83,6 +83,17 @@ Proton Calendar is end-to-end encrypted and doesn't share its events with Androi
 ## Music
 
 Through whichever app plays music on the phone, with the phone's own media controls; nothing to sign in to (`focus/MediaFocus.kt`, `media/Music.kt`). "Play", "pause", "skip", "previous song", "turn it up". "Play Bonobo" hands the words to the music app's search, which plays the best match (the first time, Android may ask which app). Replies are shown, not said, so Polly doesn't talk over the music. "I played tennis" is still something that happened.
+
+## Phone
+
+The phone's own things, by voice.
+
+- **Timers and alarms** (`clock/Clock.kt`, `focus/ClockFocus.kt`) are set in the phone's Clock app (Android's standard requests), so they ring as usual with Anthemos closed. "Set a timer for ten minutes", "pasta timer for 12 minutes", "wake me up at 7 every weekday", "stop the timer", "show my alarms" (cancelling one is picked there). An alarm with no am or pm is for the morning.
+- **Torch, apps, battery** (`device/Device.kt`, `focus/DeviceFocus.kt`): "turn on the torch", "open Signal" (by the app's name; if no app has it and Home Assistant is connected, it goes there: "open the garage"), "how much battery".
+
+## Weather
+
+Open-Meteo's forecast (`weather/Forecasts.kt`): free, no account, nothing kept about who asks. The phone's position goes rounded to about a kilometre; a place said by name is looked up first. "What's the weather like", "will it rain tomorrow", "how hot will it be on Saturday", "what's the weather in Melbourne this weekend" (`weather/Weather.kt` reads the question and words the answer). Inside is the house's: "how cold is it inside" goes to Home Assistant.
 
 ## Home
 
@@ -188,6 +199,8 @@ Hey Poly and updates moved from Speak to Settings, with "Check for
 updates"; Speak's Settings button shows a dot when an update is ready.
 
 **2.17:** Home Assistant (above).
+
+**2.18:** Timers, alarms, the torch, apps, battery, and the weather (above).
 
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 

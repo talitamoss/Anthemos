@@ -4,6 +4,8 @@ package com.domain.app.voice
 import com.domain.app.focus.CalendarFocus
 import com.domain.app.focus.CallsFocus
 import com.domain.app.focus.ChangeFocus
+import com.domain.app.focus.ClockFocus
+import com.domain.app.focus.DeviceFocus
 import com.domain.app.focus.KronkFocus
 import com.domain.app.focus.LogFocus
 import com.domain.app.focus.HomeFocus
@@ -12,6 +14,7 @@ import com.domain.app.focus.NotesFocus
 import com.domain.app.focus.PhoneFocus
 import com.domain.app.focus.PlacesFocus
 import com.domain.app.focus.QuestionsFocus
+import com.domain.app.focus.WeatherFocus
 import com.domain.app.focus.Turn
 import java.time.ZonedDateTime
 
@@ -73,7 +76,10 @@ object Commands {
         PlacesFocus.focus(),
         KronkFocus.focus(),
         MediaFocus.focus(),
-        HomeFocus.focus()
+        HomeFocus.focus(),
+        ClockFocus.focus(),
+        DeviceFocus.focus(),
+        WeatherFocus.focus()
     )
 
     /**
@@ -84,7 +90,8 @@ object Commands {
      */
     val order = listOf(
         "change.undo", "change.edit",
-        "kronk.connect", "calendar.link", "calendar.unlink", "places.here", "places.was", "places.trail", "kronk.stop", "kronk.share", "media.control", "media.play", "home.connect", "home.do", "places.name",
+        "kronk.connect", "calendar.link", "calendar.unlink", "places.here", "places.was", "places.trail", "kronk.stop", "kronk.share", "clock.set", "device.torch", "device.battery", "weather.ask",
+        "media.control", "media.play", "device.open", "home.connect", "home.do", "places.name",
         "calendar.add", "calls.call", "calls.teach", "calendar.ask", "phone.ask", "questions.ask", "questions.other",
         "notes.note", "log.record"
     )
