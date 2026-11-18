@@ -246,36 +246,15 @@ fun VoiceScreen(
             }
         }
 
-        if (state.pendingCall != null || state.pendingEvent != null || state.pendingShare != null) {
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { viewModel.confirm(true) }) {
-                    Text(
-                        when {
-                            state.pendingShare != null -> "Yes, share"
-                            state.pendingCall != null -> "Yes, call"
-                            else -> "Yes, add"
-                        }
-                    )
-                }
-                OutlinedButton(onClick = { viewModel.confirm(false) }) { Text("No") }
-            }
-        }
-        if (state.unsure != null) {
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { viewModel.retry() }) { Text("Try again") }
-                OutlinedButton(onClick = { viewModel.keepUnsure() }) {
-                    Text(if (state.unsure?.items.isNullOrEmpty()) "Keep as note" else "Yes, log it")
-                }
-            }
-        }
-        state.choosing?.let { choose ->
+        // The answers to a question waiting: yes or no, which one, try again.
+        state.waiting?.choices?.takeIf { it.isNotEmpty() }?.let { choices ->
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                choose.options.forEach { entry ->
-                    OutlinedButton(onClick = { viewModel.choose(entry) }) {
-                        Text(TIME.format(entry.time.atZone(ZoneId.systemDefault())))
+                choices.forEach { choice ->
+                    if (choice.primary) {
+                        Button(onClick = { viewModel.choose(choice) }) { Text(choice.label) }
+                    } else {
+                        OutlinedButton(onClick = { viewModel.choose(choice) }) { Text(choice.label) }
                     }
                 }
             }

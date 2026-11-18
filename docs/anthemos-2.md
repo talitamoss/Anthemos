@@ -29,14 +29,15 @@ Not on a big model on the phone, and not on a server we run for everyone: on **e
 
 ## Commands
 
-Everything Anthemos understands is listed in one file, `voice/Commands.kt`, so what it does can be read in one place:
+Everything Anthemos understands is organised by focus, so what it does can be read in one place:
 
-- A **focus** is one area of what it does: Log, Notes, Change, Questions, Calendar, Calls, Phone, Places, Kronk.
-- Each focus has its **commands**, each with an id (`calendar.add`), one line on what it does, example sentences, and how it is recognised.
-- **One order** says which command is tried first. It crosses focuses on purpose: "remind me to call Dad" is the calendar before it is a call, "this is home" is a place before it is something to log, and anything left is logged.
-- `CommandsTest` checks that every example lands on its own command and that every command is in the order. Adding a command means adding it, with examples, to its focus and to the order; the test then shows if it takes over another command's sentences.
+- A **focus** is one area of what it does, each in its own file in `focus/`: `LogFocus`, `NotesFocus`, `ChangeFocus`, `QuestionsFocus`, `CalendarFocus`, `CallsFocus`, `PhoneFocus`, `PlacesFocus`, `KronkFocus`.
+- Each focus lists its **commands**. A command has an id (`calendar.add`), one line on what it does, example sentences, how it is recognised, and what it does then. Everything a focus does sits in its file.
+- **`voice/Commands.kt`** gathers the focuses and holds **one order** in which commands are tried. It crosses focuses on purpose: "remind me to call Dad" is the calendar before it is a call, "this is home" is a place before it is something to log, and anything left is logged.
+- **`focus/Turn.kt`** is what a focus can do while handling one thing said: reply, ask something and wait for the answer (`Waiting`, with buttons as `Choice`s; `confirm` for yes or no), ask a prompt, need location. Speak (`ui/voice/VoiceViewModel.kt`) provides it and does nothing else: listening, replies, questions waiting, prompts.
+- **`CommandsTest`** checks that every example lands on its own command and that every command is in the order.
 
-What each command does once recognised is still in `ui/voice/VoiceViewModel.kt`. Moving that beside each focus is the next step.
+To add a command: add it, with examples, to its focus and to the order. To add a focus: a new file in `focus/`, listed in `Commands.focuses`. The test shows if a new command takes over another one's sentences.
 
 ## Prompts
 

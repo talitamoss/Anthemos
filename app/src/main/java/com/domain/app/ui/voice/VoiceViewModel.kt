@@ -1,45 +1,32 @@
 // app/src/main/java/com/domain/app/ui/voice/VoiceViewModel.kt
 package com.domain.app.ui.voice
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.domain.app.core.data.DataRepository
-import com.domain.app.calendar.Diary
 import com.domain.app.calendar.Event
 import com.domain.app.calendar.Reminders
+import com.domain.app.core.data.DataRepository
+import com.domain.app.focus.ChangeFocus.undo
+import com.domain.app.focus.Choice
+import com.domain.app.focus.KronkFocus.finishConnecting
+import com.domain.app.focus.Turn
+import com.domain.app.focus.Waiting
 import com.domain.app.kronk.Kronk
 import com.domain.app.kronk.KronkInbox
-import com.domain.app.place.Geo
-import com.domain.app.place.Here
-import com.domain.app.place.LiveShare
-import com.domain.app.place.LocationService
 import com.domain.app.place.LocationState
-import com.domain.app.place.Place
-import com.domain.app.place.Whereabouts
 import com.domain.app.prompts.Prompt
-import com.domain.app.sense.PhoneAnswers
-import com.domain.app.sense.PhoneQuestion
-import com.domain.app.sense.PhoneSense
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.prompts.PromptLog
-import com.domain.app.prompts.PromptRules
-import com.domain.app.prompts.PromptWorker
-import com.domain.app.voice.Changes
+import com.domain.app.sense.PhoneSense
 import com.domain.app.voice.Contacts
 import com.domain.app.voice.Entry
-import com.domain.app.voice.Item
 import com.domain.app.voice.Listener
-import com.domain.app.voice.Questions
 import com.domain.app.voice.RuleParser
 import com.domain.app.voice.RuleReader
 import com.domain.app.voice.Speaker
-import com.domain.app.voice.VoiceRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -47,17 +34,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.util.UUID
 import javax.inject.Inject
 
 enum class VoicePhase { IDLE, LISTENING, CONFIRMING }
@@ -68,66 +51,87 @@ data class VoiceUiState(
     val heard: String = "",
     /** What Anthemos said back: a confirmation or an answer. */
     val reply: String = "",
-    /** A call waiting for yes or no. */
-    val pendingCall: PendingCall? = null,
-    /** A word ("dad") waiting to be told which contact it means. */
-    val pendingName: String? = null,
+    /** A question waiting for an answer: "Call Sam?", "Which coffee?" */
+    val waiting: Waiting? = null,
     /** A prompt or follow-up waiting for its answer. */
     val prompt: Prompt? = null,
-    /** An event waiting for yes or no. */
-    val pendingEvent: Event? = null,
     /** An event just added, which can be handed to Proton. */
     val handoff: Event? = null,
     /** True when the screen can't be read: the phone's usage access is off. */
     val senseOff: Boolean = false,
     /** Something was just kept or changed, so Undo is offered. */
     val canUndo: Boolean = false,
-    /** A change that fits more than one entry, waiting for which. */
-    val choosing: Changes.Outcome.Choose? = null,
-    /** Words that didn't make sense, waiting for "keep it" or another try. */
-    val unsure: VoiceRequest.Record? = null,
-    /** Live location waiting for yes or no: it leaves the phone. */
-    val pendingShare: PendingShare? = null,
     /** Location permission is needed: the screen asks for it. */
     val askLocation: Boolean = false
 )
 
-data class PendingShare(val mates: List<Kronk.Mate>, val until: ZonedDateTime)
-
-data class PendingCall(val match: Contacts.Match, val said: String)
-
 /**
- * The voice loop (docs/anthemos-2.md): listen, understand, then keep the
- * words, answer a question, or confirm an action first, and say what
- * happened.
+ * Speak's voice loop (docs/anthemos-2.md): listen, find which command was
+ * said (`voice/Commands.kt`), and let its focus (`focus/`) handle it. This
+ * holds only what every focus shares: listening, replies, questions waiting
+ * for an answer, and prompts.
  */
 @HiltViewModel
 class VoiceViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val dataRepository: DataRepository
+    @ApplicationContext private val appContext: Context,
+    dataRepository: DataRepository
 ) : ViewModel() {
 
-    private val listener = Listener(context)
-    private val speaker = Speaker(context)
-    private val parser = RuleParser()
-    private val reader = RuleReader()
-    private val contacts = Contacts(context)
-    private val promptLog = PromptLog(context)
-    private val sense = PhoneSense(context)
-    private val kronk = Kronk(context)
-    private val location = LocationState(context)
-    /** What to do once location permission is answered. */
-    private var afterLocation: Whereabouts? = null
-    /** Whether this turn was spoken: typed turns aren't answered aloud. */
-    private var voice = true
-    private var lastSavedId: String? = null
-    /** Everything kept from the last thing said, so Undo takes back all of it. */
-    private var lastTurn: List<String> = emptyList()
+    private val listener = Listener(appContext)
+    private val speaker = Speaker(appContext)
     /** When the waiting prompt was asked: an old one is dropped, not answered by whatever is said next. */
     private var promptAt: Instant = Instant.EPOCH
+    /** What to do once location permission is answered. */
+    private var afterLocation: (suspend Turn.() -> Unit)? = null
 
     private val _state = MutableStateFlow(VoiceUiState())
     val state: StateFlow<VoiceUiState> = _state.asStateFlow()
+
+    private val turn = object : Turn {
+        override val context = appContext
+        override val data = dataRepository
+        override val parser = RuleParser()
+        override val reader = RuleReader()
+        override val contacts = Contacts(appContext)
+        override val promptLog = PromptLog(appContext)
+        override val sense = PhoneSense(appContext)
+        override val kronk = Kronk(appContext)
+        override val location = LocationState(appContext)
+        override var voice = true
+        override var unclear = false
+        override var prompt: Prompt? = null
+        override var lastSavedId: String? = null
+        override var lastTurn: List<String> = emptyList()
+
+        override fun reply(text: String) {
+            _state.update { it.copy(reply = text, phase = phaseFor(it)) }
+            if (voice) speaker.say(text)
+        }
+
+        override fun ask(waiting: Waiting) {
+            _state.update {
+                it.copy(reply = waiting.question, waiting = waiting, phase = if (waiting.confirming) VoicePhase.CONFIRMING else VoicePhase.IDLE)
+            }
+            speakThen(waiting.question) { if (_state.value.waiting === waiting) listen() }
+        }
+
+        override fun askPrompt(question: String, prompt: Prompt) {
+            promptAt = Instant.now()
+            _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, prompt = prompt) }
+            speakThen(question) { if (_state.value.prompt == prompt) listen() }
+        }
+
+        override fun show(change: (VoiceUiState) -> VoiceUiState) = _state.update(change)
+
+        override fun listen() = this@VoiceViewModel.listen()
+
+        override suspend fun handle(text: String) = this@VoiceViewModel.handle(text, unclear)
+
+        override fun needLocation(then: suspend Turn.() -> Unit) {
+            afterLocation = then
+            _state.update { it.copy(askLocation = true) }
+        }
+    }
 
     /** Today's entries, newest first. */
     val today: StateFlow<List<Entry>> = dataRepository.getPluginData(Entry.PLUGIN_ID)
@@ -145,7 +149,7 @@ class VoiceViewModel @Inject constructor(
             KronkInbox.code.collect { code ->
                 code ?: return@collect
                 KronkInbox.code.value = null
-                if (code.isEmpty()) reply("Kronk didn't sign you in") else finishKronk(code)
+                turn.finishConnecting(code)
             }
         }
     }
@@ -153,27 +157,34 @@ class VoiceViewModel @Inject constructor(
     fun listen() {
         // A reminder like "Call Dad" was tapped: act on it as if said.
         PromptInbox.takeSay()?.let { words ->
-            voice = true
+            turn.voice = true
             _state.update { it.copy(heard = words, handoff = null) }
-            handle(words)
+            launchHandle(words)
             return
         }
         speaker.say("") // stop anything being spoken
         // Opened from a prompt notification: show its question while listening.
         val prompt = PromptInbox.take()?.also { promptAt = Instant.now() } ?: freshPrompt()
         _state.update {
-            it.copy(phase = VoicePhase.LISTENING, heard = "", reply = prompt?.text.orEmpty(), prompt = prompt, handoff = null, canUndo = false)
+            it.copy(
+                phase = VoicePhase.LISTENING, heard = "", reply = it.waiting?.question ?: prompt?.text.orEmpty(),
+                prompt = prompt, handoff = null, canUndo = false
+            )
         }
         listener.start(object : Listener.Callbacks {
             override fun onListening() = Unit
             override fun onPartial(text: String) = _state.update { it.copy(heard = text) }
             override fun onHeard(text: String, unclear: Boolean) {
-                voice = true
+                turn.voice = true
                 _state.update { it.copy(heard = text) }
-                handle(text, unclear)
+                launchHandle(text, unclear)
             }
             override fun onError(message: String) {
-                _state.update { it.copy(phase = phaseFor(it), reply = message, pendingName = null, prompt = null) }
+                // A yes or no stays asked; anything else waiting is dropped.
+                _state.update {
+                    val waiting = it.waiting?.takeIf { w -> w.confirming }
+                    it.copy(reply = message, waiting = waiting, prompt = null, phase = if (waiting != null) VoicePhase.CONFIRMING else VoicePhase.IDLE)
+                }
             }
         })
     }
@@ -185,35 +196,27 @@ class VoiceViewModel @Inject constructor(
     fun typed(text: String) {
         if (text.isBlank()) return
         listener.cancel()
-        voice = false
+        turn.voice = false
         _state.update { it.copy(phase = phaseFor(it), heard = text.trim(), handoff = null, canUndo = false) }
-        handle(text.trim())
+        launchHandle(text.trim())
     }
 
-    /** Yes or no to a pending call or event, by tap. */
-    fun confirm(yes: Boolean) {
+    /** A button under a question, tapped. */
+    fun choose(choice: Choice) {
         listener.cancel()
-        _state.value.pendingShare?.let { share ->
-            if (yes) viewModelScope.launch { startSharing(share) } else replyShare("Okay, not sharing")
-            return
-        }
-        _state.value.pendingEvent?.let { event ->
-            if (yes) viewModelScope.launch { addEvent(event) } else reply("Okay, not added", pendingEvent = null)
-            return
-        }
-        val call = _state.value.pendingCall ?: return
-        if (yes) dial(call) else reply("Okay, not calling", pendingCall = null)
+        _state.update { it.copy(waiting = null, phase = VoicePhase.IDLE) }
+        viewModelScope.launch { choice.run(turn) }
     }
 
     /** Copies the event just added into Proton (or whichever calendar app takes it). */
     fun handOff() {
         val event = _state.value.handoff ?: return
         _state.update { it.copy(handoff = null) }
-        if (!Reminders.handOff(context, event)) reply("No calendar app on the phone took it")
+        if (!Reminders.handOff(appContext, event)) turn.reply("No calendar app on the phone took it")
     }
 
     fun allowSense() {
-        context.startActivity(sense.settings())
+        appContext.startActivity(turn.sense.settings())
     }
 
     /**
@@ -221,604 +224,57 @@ class VoiceViewModel @Inject constructor(
      * from a store until "Allow restricted settings" is chosen there.
      */
     fun appInfo() {
-        context.startActivity(
-            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+        appContext.startActivity(
+            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${appContext.packageName}"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 
-    fun refreshSense() = _state.update { it.copy(senseOff = !sense.allowed()) }
+    fun refreshSense() = _state.update { it.copy(senseOff = !turn.sense.allowed()) }
 
-    fun undo() = viewModelScope.launch { undoLast() }
-
-    private fun handle(text: String, unclear: Boolean = false) {
-        _state.value.unsure?.let { doubtful ->
-            _state.update { it.copy(unsure = null) }
-            val lower = text.lowercase().trim()
-            when {
-                KEEP.containsMatchIn(lower) || (doubtful.items.isNotEmpty() && YES.any { Regex("\\b$it\\b").containsMatchIn(lower) }) ->
-                    viewModelScope.launch { record(doubtful) }
-                lower in NO || AGAIN.containsMatchIn(lower) -> retry()
-                // Anything else is the second try.
-                else -> handle(text, unclear)
-            }
-            return
-        }
-        _state.value.pendingShare?.let { share ->
-            val lower = text.lowercase()
-            when {
-                NO.any { Regex("\\b$it\\b").containsMatchIn(lower) } -> replyShare("Okay, not sharing")
-                YES.any { Regex("\\b$it\\b").containsMatchIn(lower) } || lower.contains("share") ->
-                    viewModelScope.launch { startSharing(share) }
-                else -> confirmShare(share)
-            }
-            return
-        }
-        _state.value.pendingEvent?.let { event ->
-            val lower = text.lowercase()
-            when {
-                NO.any { Regex("\\b$it\\b").containsMatchIn(lower) } -> reply("Okay, not added", pendingEvent = null)
-                YES.any { Regex("\\b$it\\b").containsMatchIn(lower) } || lower.contains("add") ->
-                    viewModelScope.launch { addEvent(event) }
-                else -> confirmEvent(event)
-            }
-            return
-        }
-        _state.value.pendingCall?.let { call ->
-            val lower = text.lowercase()
-            // No before yes: "don't call" contains "call".
-            when {
-                NO.any { Regex("\\b$it\\b").containsMatchIn(lower) } -> reply("Okay, not calling", pendingCall = null)
-                YES.any { Regex("\\b$it\\b").containsMatchIn(lower) } -> dial(call)
-                else -> ask("Call ${call.match.name}? Say yes or no.", call)
-            }
-            return
-        }
-        _state.value.pendingName?.let { word ->
-            _state.update { it.copy(pendingName = null) }
-            viewModelScope.launch { learnName(word, text) }
-            return
-        }
-
-        _state.value.choosing?.let { choose ->
-            _state.update { it.copy(choosing = null) }
-            val picked = Changes.pick(text, choose.options, ZonedDateTime.now())
-            if (picked == null) reply("Okay, left as it was") else viewModelScope.launch { finish(Changes.applyTo(choose.change, picked, ZonedDateTime.now()), null) }
-            return
-        }
-
-        val request = parser.parse(text)
-        if (request is VoiceRequest.Record && doubtful(request, unclear)) {
-            askUnsure(request)
-            return
-        }
-        val prompt = freshPrompt()
-        _state.update { it.copy(prompt = null) }
-        // Only something to keep answers a prompt: "call dad" or a question is still that.
-        if (prompt != null && request is VoiceRequest.Record) {
-            viewModelScope.launch { answer(prompt, request) }
-            return
-        }
-
-        when (request) {
-            is VoiceRequest.Record -> viewModelScope.launch { record(request) }
-            is VoiceRequest.Undo -> viewModelScope.launch { undoLast() }
-            is VoiceRequest.Edit -> viewModelScope.launch { change(request) }
-            is VoiceRequest.Call -> viewModelScope.launch { prepareCall(request) }
-            is VoiceRequest.Teach -> viewModelScope.launch { teach(request) }
-            is VoiceRequest.Ask -> viewModelScope.launch { answer(request) }
-            is VoiceRequest.AddEvent -> confirmEvent(request.event)
-            is VoiceRequest.AskDiary -> viewModelScope.launch {
-                reply(Diary.answer(request.question, events(), ZonedDateTime.now()))
-            }
-            is VoiceRequest.AskPhone -> answerPhone(request.question)
-            is VoiceRequest.Where -> viewModelScope.launch { where(request.ask) }
-        }
+    fun undo() {
+        viewModelScope.launch { turn.undo() }
     }
-
-    // ── Places, the trail, and live sharing (docs/anthemos-2.md, "Places") ──
 
     /** The screen asked for location: carry on with what needed it. */
     fun locationAnswered(granted: Boolean) {
         _state.update { it.copy(askLocation = false) }
-        val waiting = afterLocation ?: return
+        val then = afterLocation ?: return
         afterLocation = null
-        if (granted) viewModelScope.launch { where(waiting) } else reply("I need your location for that")
+        viewModelScope.launch { if (granted) then(turn) else turn.reply("I need your location for that") }
     }
 
-    private suspend fun where(ask: Whereabouts) {
-        val needsLocation = ask is Whereabouts.Name || ask is Whereabouts.WhereAmI || ask is Whereabouts.Share ||
-            (ask is Whereabouts.Trail && ask.on)
-        if (needsLocation && !LocationService.allowed(context)) {
-            afterLocation = ask
-            _state.update { it.copy(askLocation = true) }
+    private fun launchHandle(text: String, unclear: Boolean = false) {
+        viewModelScope.launch { handle(text, unclear) }
+    }
+
+    /** One thing said: the answer to a question waiting, or a command. */
+    private suspend fun handle(text: String, unclear: Boolean) {
+        turn.unclear = unclear
+        _state.value.waiting?.let { waiting ->
+            _state.update { it.copy(waiting = null, phase = VoicePhase.IDLE) }
+            waiting.answer(turn, text, waiting)
             return
         }
-        when (ask) {
-            is Whereabouts.Name -> namePlace(ask.name)
-            Whereabouts.WhereAmI -> {
-                val here = Here.now(context) ?: return reply("I can't tell where you are right now")
-                val place = Geo.describe(places(), here.lat, here.lng)
-                reply(if (place.startsWith("somewhere")) "You're $place. Say this is, and a name, to name it." else "You're at $place")
-            }
-            is Whereabouts.WhereWas -> reply(whereWas(ask))
-            is Whereabouts.Trail -> {
-                location.trail = ask.on
-                LocationService.refresh(context)
-                reply(if (ask.on) "Keeping your trail, only on this phone" else "Stopped keeping your trail")
-            }
-            is Whereabouts.Share -> prepareShare(ask)
-            is Whereabouts.StopSharing -> stopSharing(ask.name)
-            Whereabouts.LinkKronk -> linkKronk()
-        }
-    }
-
-    private suspend fun places(): List<Place> = withContext(Dispatchers.IO) {
-        dataRepository.getPluginData(Place.PLUGIN_ID).first().mapNotNull(Place::from)
-    }
-
-    /** "This is home": names where the phone is, or moves the name here. */
-    private suspend fun namePlace(name: String) {
-        val here = Here.now(context) ?: return reply("I can't tell where you are right now")
-        val all = places()
-        val same = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
-        val place = same?.copy(lat = here.lat, lng = here.lng)
-            ?: Geo.placeAt(all, here.lat, here.lng)?.copy(name = name)
-            ?: Place.named(name, here)
-        withContext(Dispatchers.IO) { dataRepository.saveDataPoint(place.toDataPoint()) }
-        lastSavedId = place.id
-        lastTurn = listOf(place.id)
-        _state.update { it.copy(canUndo = true) }
-        reply("Saved this place as $name")
-    }
-
-    /** "Yesterday: home until 8:10 am, the gym 9:00 to 10:15 am." */
-    private suspend fun whereWas(ask: Whereabouts.WhereWas): String {
-        val zone = ZoneId.systemDefault()
-        val from = ask.day.atStartOfDay(zone).toInstant()
-        val until = ask.day.plusDays(1).atStartOfDay(zone).toInstant()
-        val stays = withContext(Dispatchers.IO) {
-            dataRepository.getPluginData(Entry.PLUGIN_ID).first().mapNotNull(Entry::from)
-        }.filter { e -> e.source == "phone" && e.items.any { it.kind == "place" } && e.time >= from && e.time < until }
-            .sortedBy { it.time }
-        if (stays.isEmpty()) {
-            return if (location.trail) "Nothing kept ${ask.phrase} yet" else "I haven't kept a trail. Say start tracking."
-        }
-        val said = stays.joinToString("; ") { e -> e.words.removePrefix("At ").removePrefix("Stayed ") }
-        return "${ask.phrase.replaceFirstChar { it.uppercase() }}: $said"
-    }
-
-    /** Finds the Mates named, then asks before anything leaves the phone. */
-    private suspend fun prepareShare(ask: Whereabouts.Share) {
-        if (!kronk.linked) return reply("Connect to Kronk first. Say connect to Kronk.")
-        val found = mutableListOf<Kronk.Mate>()
-        for (name in ask.names) {
-            val matches = try {
-                withContext(Dispatchers.IO) { kronk.mates(name) }
-            } catch (e: Exception) {
-                return reply(e.message ?: "I couldn't reach Kronk")
-            }
-            val exact = matches.filter { m ->
-                m.name.equals(name, ignoreCase = true) || m.handle.equals(name.replace(" ", ""), ignoreCase = true) ||
-                    m.name.substringBefore(' ').equals(name, ignoreCase = true)
-            }
-            val pick = exact.singleOrNull() ?: matches.singleOrNull()
-            when {
-                pick != null -> found += pick
-                matches.isEmpty() -> return reply("I can't find a Mate called $name on Kronk")
-                else -> return reply("Which $name: ${matches.take(3).joinToString(" or ") { it.name }}? Say it again with their full name.")
-            }
-        }
-        confirmShare(PendingShare(found.distinctBy { it.id }, ask.until))
-    }
-
-    private fun confirmShare(share: PendingShare) {
-        val question = "Share your exact location with ${names(share.mates)} until ${clock(share.until)}?"
-        _state.update { it.copy(phase = VoicePhase.CONFIRMING, reply = question, pendingShare = share) }
-        speakThen(question) { if (_state.value.pendingShare == share) listen() }
-    }
-
-    private suspend fun startSharing(share: PendingShare) {
-        val id = try {
-            withContext(Dispatchers.IO) { kronk.startSharing(share.mates, share.until.toInstant()) }
-        } catch (e: Exception) {
-            return replyShare(e.message ?: "I couldn't reach Kronk")
-        }
-        location.shares = location.shares + LiveShare(id, share.mates.map { it.name }, share.until.toInstant())
-        LocationService.refresh(context)
-        replyShare("Sharing with ${names(share.mates)} until ${clock(share.until)}. Say stop sharing to end it.")
-    }
-
-    private suspend fun stopSharing(name: String?) {
-        val shares = location.shares
-        val ending = if (name == null) shares else shares.filter { s -> s.names.any { it.contains(name, ignoreCase = true) } }
-        if (ending.isEmpty()) return reply(if (name == null) "You're not sharing your location" else "You're not sharing with $name")
-        location.shares = shares - ending.toSet()
-        LocationService.refresh(context)
-        withContext(Dispatchers.IO) { ending.forEach { runCatching { kronk.stopSharing(it.id) } } }
-        reply("Stopped sharing with ${ending.flatMap { it.names }.distinct().joinToString(" and ")}")
-    }
-
-    private suspend fun linkKronk() {
-        if (kronk.linked) return reply("Already connected to Kronk")
-        val page = try {
-            withContext(Dispatchers.IO) { kronk.signInPage() }
-        } catch (e: Exception) {
-            return reply(e.message ?: "I couldn't reach Kronk")
-        }
-        context.startActivity(Intent(Intent.ACTION_VIEW, page).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        reply("Sign in to Kronk in the browser, then come back here")
-    }
-
-    private suspend fun finishKronk(code: String) {
-        try {
-            withContext(Dispatchers.IO) { kronk.finishSignIn(code) }
-            reply("Connected to Kronk. Say share my location with, and a Mate's name.")
-        } catch (e: Exception) {
-            reply(e.message ?: "I couldn't finish connecting to Kronk")
-        }
-    }
-
-    private fun replyShare(text: String) {
-        _state.update { it.copy(pendingShare = null) }
-        reply(text)
-    }
-
-    private fun names(mates: List<Kronk.Mate>) = when (mates.size) {
-        1 -> mates[0].name
-        else -> mates.dropLast(1).joinToString(", ") { it.name } + " and " + mates.last().name
-    }
-
-    private fun clock(at: ZonedDateTime) =
-        java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH).format(at).lowercase()
-
-    private suspend fun events(): List<Event> = withContext(Dispatchers.IO) {
-        dataRepository.getPluginData(Event.PLUGIN_ID).first().mapNotNull(Event::from)
-    }
-
-    /** "Add Dentist, Thursday 20 November at 3:00 pm?" */
-    private fun confirmEvent(event: Event) {
-        val now = ZonedDateTime.now()
-        val question = if (event.reminder) {
-            "Remind you: ${event.title}, ${Diary.dayAndTime(event, now)}?"
-        } else {
-            "Add ${Diary.describe(event, now)}?"
-        }
-        _state.update { it.copy(phase = VoicePhase.CONFIRMING, reply = question, pendingEvent = event) }
-        speakThen(question) { if (_state.value.pendingEvent == event) listen() }
-    }
-
-    private suspend fun addEvent(event: Event) {
-        withContext(Dispatchers.IO) { dataRepository.saveDataPoint(event.toDataPoint()) }
-        Reminders.schedule(context, event)
-        val now = ZonedDateTime.now()
-        if (event.reminder) {
-            reply("I'll remind you ${Diary.dayAndTime(event, now)}", pendingEvent = null)
-        } else {
-            reply("Added ${Diary.describe(event, now)}", pendingEvent = null)
-            _state.update { it.copy(handoff = event) }
-        }
-    }
-
-    private fun answerPhone(question: PhoneQuestion) {
-        if (!sense.allowed()) {
-            _state.update { it.copy(senseOff = true) }
-            reply("I can't see that yet. Tap Allow to let Anthemos read screen time.")
-            return
-        }
-        val now = ZonedDateTime.now()
-        reply(
-            when (question) {
-                is PhoneQuestion.ScreenTime -> PhoneAnswers.screenTime(
-                    question.phrase,
-                    sense.screenMinutes(question.from, question.until),
-                    sense.topApps(question.from, question.until)
-                )
-                PhoneQuestion.Slept -> PhoneAnswers.slept(sense.lastNight(now), now)
-            }
-        )
+        // A prompt lasts a few minutes; only something to keep answers it.
+        turn.prompt = freshPrompt()
+        _state.update { it.copy(prompt = null) }
+        val match = turn.parser.match(text)
+        match.command.run(turn, match.request)
     }
 
     /** Speaks [text] on a spoken turn, then runs [then]; on a typed turn, just shows it. */
     private fun speakThen(text: String, then: () -> Unit) {
-        if (!voice) return
+        if (!turn.voice) return
         speaker.say(text) { viewModelScope.launch(Dispatchers.Main) { then() } }
-    }
-
-    /** Keeps what was said: one entry, or one per part said with its own time. */
-    private suspend fun record(request: VoiceRequest.Record) {
-        val parts = request.parts.ifEmpty { listOf(request) }
-        val saved = parts.map { save(it.transcript, it.items, null, at = it.at?.toInstant()) }
-        lastTurn = saved.map { it.id }
-        followUpOr(saved.last(), request.reply)
-    }
-
-    private suspend fun save(words: String, items: List<Item>, replyText: String?, prompt: String? = null, at: Instant? = null): Entry {
-        val entry = Entry(
-            UUID.randomUUID().toString(), at ?: Instant.now(), words, items, RuleReader.NAME, prompt,
-            source = if (voice) "voice" else "typed"
-        )
-        withContext(Dispatchers.IO) { dataRepository.saveDataPoint(entry.toDataPoint()) }
-        lastSavedId = entry.id
-        _state.update { it.copy(canUndo = true) }
-        replyText?.let { reply(it) }
-        return entry
-    }
-
-    /** Says [said], and asks one follow-up if an obvious detail is missing. */
-    private fun followUpOr(entry: Entry, said: String) {
-        val next = PromptRules.followUp(entry)
-        if (next == null) {
-            reply(said)
-            return
-        }
-        val question = "$said. ${next.text}"
-        promptAt = Instant.now()
-        _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, prompt = next) }
-        speakThen(question) { if (_state.value.prompt == next) listen() }
-    }
-
-    /**
-     * Everything kept should be something specific; words become a note only
-     * when asked for ("take a note"). So words with nothing found in them,
-     * or that the recogniser wasn't sure of, are checked first.
-     */
-    private fun doubtful(request: VoiceRequest.Record, unclear: Boolean): Boolean {
-        if (request.note) return false
-        // An answer to a question is read with what was asked; don't second-guess it.
-        if (freshPrompt() != null) return false
-        return request.items.isEmpty() || unclear
-    }
-
-    private fun askUnsure(request: VoiceRequest.Record) {
-        val question = if (request.items.isEmpty()) {
-            "I'm not sure what to log from that. Try again, or keep it as a note?"
-        } else {
-            "I may have misheard: ${reader.reply(request.items).replaceFirst("Logged", "log")}? Say yes, or try again."
-        }
-        _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, unsure = request) }
-        speakThen(question) { if (_state.value.unsure == request) listen() }
-    }
-
-    /** "Keep as note", tapped. */
-    fun keepUnsure() {
-        val request = _state.value.unsure ?: return
-        listener.cancel()
-        _state.update { it.copy(unsure = null) }
-        viewModelScope.launch { record(request) }
-    }
-
-    /** "Try again", tapped or said. */
-    fun retry() {
-        _state.update { it.copy(unsure = null, reply = "") }
-        listen()
     }
 
     /** The waiting prompt, if it was asked in the last few minutes. */
     private fun freshPrompt(): Prompt? =
         _state.value.prompt?.takeIf { Instant.now().isBefore(promptAt.plusSeconds(PROMPT_MINUTES * 60)) }
 
-    /** An answer to a prompt or a follow-up. */
-    private suspend fun answer(prompt: Prompt, request: VoiceRequest.Record) {
-        val text = request.transcript
-        if (prompt.entryId != null) {
-            // "Forty minutes" fills in the walk; "I had a coffee" is something new.
-            // "What did you have?" and "How did you sleep?" are answered with things; the rest aren't.
-            val ownThings = prompt.field !in setOf("what", "how") && request.items.any { it.kind != "spend" && it.kind != "sleep" }
-            if (ownThings || !addTo(prompt, text)) record(request)
-            return
-        }
-        promptLog.answered(prompt.id)
-        if (prompt.id.startsWith("${PromptRules.EVENT}:")) promptLog.answered(PromptRules.EVENT)
-        // Hours the phone saw, when the answer gives none.
-        val items = reader.read(text, prompt.context).map { item ->
-            if (item.kind == "sleep" && item.minutes == null && prompt.minutes != null) item.copy(minutes = prompt.minutes) else item
-        }
-        val entry = save(text, items, null, prompt = prompt.text, at = request.at?.toInstant())
-        followUpOr(entry, if (items.isEmpty()) "Kept" else reader.reply(items))
-    }
-
-    /**
-     * A follow-up answer fills in the detail on the entry it was about.
-     * False when the answer doesn't hold that detail, so it's kept on its own.
-     */
-    private suspend fun addTo(prompt: Prompt, answer: String): Boolean {
-        val entry = withContext(Dispatchers.IO) { dataRepository.getDataPoint(prompt.entryId!!) }?.let(Entry::from)
-            ?: return false
-        val items = entry.items.toMutableList()
-        var said: String? = null
-        when (prompt.field) {
-            "minutes" -> {
-                val i = items.indexOfFirst { (it.kind == "activity" || it.kind == "sleep") && it.minutes == null }
-                val minutes = if (i >= 0) reader.duration(answer, bareIsHours = items[i].kind == "sleep") else null
-                if (minutes != null) {
-                    items[i] = items[i].copy(minutes = minutes)
-                    said = if (items[i].kind == "sleep") "Added, ${minutes / 60.0} hours".replace(".0 ", " ") else "Added, $minutes minutes"
-                }
-            }
-            "amount" -> reader.money(answer)?.let {
-                items += it
-                said = "Added, ${it.label}"
-            }
-            // "What did you have?" after "I had lunch": the food takes the meal's place.
-            "what" -> {
-                val food = reader.read(answer, prompt.context).filter { it.kind == "food" || it.kind == "drink" }
-                if (food.isNotEmpty()) {
-                    items.removeAll { it.kind == "food" && it.label == it.meal }
-                    items += food
-                    said = reader.reply(food)
-                }
-            }
-            "sleep" -> reader.duration(answer, bareIsHours = true)?.let { minutes ->
-                items += Item("sleep", "sleep", minutes = minutes)
-                said = "Added, ${minutes / 60.0} hours".replace(".0 ", " ")
-            }
-            // "How did you sleep?": the words are the answer.
-            "how" -> if (answer.isNotBlank()) said = "Noted"
-        }
-        if (said == null) return false
-        val updated = entry.copy(words = entry.words.trimEnd('.', ' ') + ". " + answer, items = items)
-        withContext(Dispatchers.IO) { dataRepository.saveDataPoint(updated.toDataPoint()) }
-        reply(said)
-        return true
-    }
-
-    private suspend fun answer(request: VoiceRequest.Ask) {
-        val entries = withContext(Dispatchers.IO) {
-            dataRepository.getPluginData(Entry.PLUGIN_ID).first().mapNotNull(Entry::from)
-        }
-        reply(Questions.answer(request.question, entries, ZonedDateTime.now(), contacts::alias))
-    }
-
-    private suspend fun undoLast() {
-        val id = lastSavedId ?: today.value.firstOrNull()?.id
-        if (id == null) {
-            reply("There's nothing to take back")
-            return
-        }
-        val ids = if (id in lastTurn) lastTurn else listOf(id)
-        withContext(Dispatchers.IO) { ids.forEach { dataRepository.deleteDataPoint(it) } }
-        lastSavedId = null
-        lastTurn = emptyList()
-        _state.update { it.copy(canUndo = false) }
-        reply("Taken back")
-    }
-
-    /** "Change the coffee to tea", "delete the coffee", "that was at eight". */
-    private suspend fun change(request: VoiceRequest.Edit) {
-        val now = ZonedDateTime.now()
-        val since = now.minusDays(7).toInstant()
-        val entries = withContext(Dispatchers.IO) {
-            dataRepository.getPluginData(Entry.PLUGIN_ID).first().mapNotNull(Entry::from)
-        }.filter { it.source != "phone" && it.time.isAfter(since) }.sortedByDescending { it.time }
-        val last = entries.firstOrNull { it.id == lastSavedId } ?: entries.firstOrNull()
-        finish(Changes.apply(request.change, entries, last, now), request.transcript)
-    }
-
-    /** Which one, tapped. */
-    fun choose(entry: Entry) {
-        val choose = _state.value.choosing ?: return
-        listener.cancel()
-        _state.update { it.copy(choosing = null) }
-        viewModelScope.launch { finish(Changes.applyTo(choose.change, entry, ZonedDateTime.now()), null) }
-    }
-
-    private suspend fun finish(outcome: Changes.Outcome, transcript: String?) {
-        when (outcome) {
-            is Changes.Outcome.Save -> {
-                withContext(Dispatchers.IO) { dataRepository.saveDataPoint(outcome.entry.toDataPoint()) }
-                lastSavedId = outcome.entry.id
-                reply(outcome.reply)
-            }
-            is Changes.Outcome.Delete -> {
-                withContext(Dispatchers.IO) { dataRepository.deleteDataPoint(outcome.entry.id) }
-                if (lastSavedId == outcome.entry.id) lastSavedId = null
-                reply(outcome.reply)
-            }
-            is Changes.Outcome.Say -> reply(outcome.reply)
-            is Changes.Outcome.Choose -> {
-                _state.update { it.copy(phase = VoicePhase.IDLE, reply = outcome.question, choosing = outcome) }
-                speakThen(outcome.question) { if (_state.value.choosing == outcome) listen() }
-            }
-            Changes.Outcome.Keep -> transcript?.let { keepWords(it) } ?: reply("Okay, left as it was")
-        }
-    }
-
-    private suspend fun prepareCall(request: VoiceRequest.Call) {
-        if (!granted(Manifest.permission.READ_CONTACTS)) {
-            if (request.sure) reply("I need your contacts to call someone") else keepWords(request.transcript)
-            return
-        }
-        val match = withContext(Dispatchers.IO) { contacts.find(request.name) }
-        when {
-            match != null -> ask("Call ${match.name}?", PendingCall(match, request.name.lowercase()))
-            // Only heard as something like "call": probably wasn't one.
-            !request.sure -> keepWords(request.transcript)
-            else -> askWho(request.name)
-        }
-    }
-
-    /** "Who's Dad?", then listens for the name as it is in the contacts. */
-    private fun askWho(word: String) {
-        val key = word.lowercase()
-        val question = "I don't know who $word is. Say their name as it is in your contacts."
-        _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, pendingName = key) }
-        speakThen(question) { if (_state.value.pendingName == key) listen() }
-    }
-
-    private suspend fun learnName(word: String, said: String) {
-        val name = said.lowercase()
-            .replace(Regex("^(?:it's|it is|that's|that is|they're|she's|he's|${Regex.escape(word)} is|${Regex.escape(word)}'s)\\s+"), "")
-            .trim()
-        val match = withContext(Dispatchers.IO) { contacts.find(name) }
-        if (match == null) {
-            reply("I couldn't find $name either")
-            return
-        }
-        contacts.teach(word, match.name)
-        ask("Got it, $word is ${match.name}. Call now?", PendingCall(match, word))
-    }
-
-    private suspend fun teach(request: VoiceRequest.Teach) {
-        val match = withContext(Dispatchers.IO) {
-            if (granted(Manifest.permission.READ_CONTACTS)) contacts.find(request.name) else null
-        }
-        if (match == null) {
-            // "Dad is tired" isn't teaching a name: keep it.
-            keepWords(request.transcript)
-            return
-        }
-        contacts.teach(request.alias, match.name)
-        reply("Got it, ${request.alias} is ${match.name}")
-    }
-
-    /** Words that turned out not to be a command: read them, and check if nothing's found. */
-    private suspend fun keepWords(transcript: String) {
-        val items = reader.read(transcript)
-        if (items.isEmpty()) {
-            askUnsure(VoiceRequest.Record(transcript, items, "Noted"))
-            return
-        }
-        followUpOr(save(transcript, items, null), reader.reply(items))
-    }
-
-    /** Asks a yes/no question about [call], then listens for the answer. */
-    private fun ask(question: String, call: PendingCall) {
-        _state.update { it.copy(phase = VoicePhase.CONFIRMING, reply = question, pendingCall = call) }
-        speakThen(question) { if (_state.value.pendingCall == call) listen() }
-    }
-
-    private fun dial(call: PendingCall) {
-        reply("Calling ${call.match.name}", pendingCall = null)
-        // Kept like anything else, so "when did I last call Dad?" can be answered.
-        viewModelScope.launch {
-            save("Called ${call.match.name}", listOf(Item("call", call.match.name, said = call.said)), null)
-        }
-        // Afterwards: "Anything to remember from the call?"
-        PromptWorker.afterCall(context, call.match.name)
-        val action = if (granted(Manifest.permission.CALL_PHONE)) Intent.ACTION_CALL else Intent.ACTION_DIAL
-        val intent = Intent(action, Uri.parse("tel:${Uri.encode(call.match.number)}"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-    }
-
-    private fun reply(
-        text: String,
-        pendingCall: PendingCall? = _state.value.pendingCall,
-        pendingEvent: Event? = _state.value.pendingEvent
-    ) {
-        _state.update {
-            val next = it.copy(reply = text, pendingCall = pendingCall, pendingEvent = pendingEvent)
-            next.copy(phase = phaseFor(next))
-        }
-        if (voice) speaker.say(text)
-    }
-
     private fun phaseFor(s: VoiceUiState) =
-        if (s.pendingCall != null || s.pendingEvent != null || s.pendingShare != null) VoicePhase.CONFIRMING else VoicePhase.IDLE
-
-    private fun granted(permission: String) =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        if (s.waiting?.confirming == true) VoicePhase.CONFIRMING else VoicePhase.IDLE
 
     override fun onCleared() {
         listener.shutdown()
@@ -827,9 +283,5 @@ class VoiceViewModel @Inject constructor(
 
     companion object {
         private const val PROMPT_MINUTES = 3L
-        private val KEEP = Regex("^(?:yes |yeah |ok |okay )?(?:keep(?: it)?|save it|note|as a note|that's right|correct|it's fine)\\b")
-        private val AGAIN = Regex("\\b(?:try again|again|retry|start again|wrong|that's wrong)\\b")
-        private val YES = listOf("yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do it", "go ahead", "call", "please")
-        private val NO = listOf("no", "nope", "nah", "cancel", "don't", "stop", "never mind")
     }
 }
