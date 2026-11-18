@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.calendar.Event
+import com.domain.app.calendar.LinkedCalendar
 import com.domain.app.calendar.Reminders
 import com.domain.app.core.data.DataRepository
 import com.domain.app.focus.ChangeFocus.undo
@@ -100,6 +101,7 @@ class VoiceViewModel @Inject constructor(
         override val sense = PhoneSense(appContext)
         override val kronk = Kronk(appContext)
         override val location = LocationState(appContext)
+        override val calendar = LinkedCalendar(appContext)
         override var voice = true
         override var unclear = false
         override var prompt: Prompt? = null

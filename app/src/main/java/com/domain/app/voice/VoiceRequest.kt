@@ -84,6 +84,15 @@ sealed class VoiceRequest {
     /** Take back the last entry. */
     data class Undo(override val transcript: String) : VoiceRequest()
 
+    /** A calendar's share link, typed or copied; [url] null means look on the clipboard. */
+    data class LinkCalendar(override val transcript: String, val url: String?) : VoiceRequest()
+
+    /** Stop reading the linked calendar. */
+    data class UnlinkCalendar(override val transcript: String) : VoiceRequest()
+
+    /** Play, pause, skip, louder. */
+    data class Media(override val transcript: String, val music: com.domain.app.media.Music) : VoiceRequest()
+
     /** A question nothing answers yet. */
     data class Unanswered(override val transcript: String) : VoiceRequest()
 }

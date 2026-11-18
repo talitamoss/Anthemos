@@ -39,7 +39,7 @@ The **Hey Poly** switch at the top of Speak turns on listening for one phrase, a
 
 Everything Anthemos understands is organised by focus, so what it does can be read in one place:
 
-- A **focus** is one area of what it does, each in its own file in `focus/`: `LogFocus`, `NotesFocus`, `ChangeFocus`, `QuestionsFocus`, `CalendarFocus`, `CallsFocus`, `PhoneFocus`, `PlacesFocus`, `KronkFocus`.
+- A **focus** is one area of what it does, each in its own file in `focus/`: `LogFocus`, `NotesFocus`, `ChangeFocus`, `QuestionsFocus`, `CalendarFocus`, `CallsFocus`, `PhoneFocus`, `PlacesFocus`, `KronkFocus`, `MediaFocus`.
 - Each focus lists its **commands**. A command has an id (`calendar.add`), one line on what it does, example sentences, how it is recognised, and what it does then. Everything a focus does sits in its file.
 - **`voice/Commands.kt`** gathers the focuses and holds **one order** in which commands are tried. It crosses focuses on purpose: "remind me to call Dad" is the calendar before it is a call, "this is home" is a place before it is something to log, and anything left is logged.
 - **`focus/Turn.kt`** is what a focus can do while handling one thing said: reply, ask something and wait for the answer (`Waiting`, with buttons as `Choice`s; `confirm` for yes or no), ask a prompt, need location. Speak (`ui/voice/VoiceViewModel.kt`) provides it and does nothing else: listening, replies, questions waiting, prompts.
@@ -74,9 +74,15 @@ Proton Calendar is end-to-end encrypted and doesn't share its events with Androi
 
 - **Add by voice or typing:** "add dentist Thursday at three", "put lunch with Sam tomorrow at half past twelve at the bakery", "I've got the market on the twenty-first". Confirmed before saving.
 - **Reminders:** "remind me to call Dad at five", "in twenty minutes". Anthemos sets off its own alarm and notification (exact alarms, set again after a restart). A "call" reminder opens Anthemos ready to make the call.
-- **Questions:** "What's on tomorrow?", "When's the dentist?", "Am I free Friday afternoon?"
+- **Questions:** "What's on tomorrow?", "When's the dentist?", "Am I free Friday afternoon?", "What's in my calendar today?"
+- **Reading Proton:** Proton can share a calendar as a read-only link ("Share with anyone", full view). Paste it into Speak, or copy it and say "connect my calendar"; the link is kept encrypted (`calendar/LinkedCalendar.kt`) and the calendar fetched at most every ten minutes, with the last copy kept for offline. Questions answer from both calendars; an event in both is told once. `calendar/Ics.kt` reads the file, with weekly, monthly and yearly repeats, skipped and moved occurrences. "Disconnect my calendar" forgets the link.
+- **Adding with Proton linked:** the event is kept in Anthemos and Proton's new-event screen opens filled in; a tap on save keeps it there too. Proton lets no app save for you.
 - **After events:** "How was the dentist?" within three hours of the end, as a prompt (same limits; "Stop asking this" stops them all).
 - Later: sync to the person's own server (CalDAV), which Proton can subscribe to.
+
+## Music
+
+Through whichever app plays music on the phone, with the phone's own media controls; nothing to sign in to (`focus/MediaFocus.kt`, `media/Music.kt`). "Play", "pause", "skip", "previous song", "turn it up". "Play Bonobo" hands the words to the music app's search, which plays the best match (the first time, Android may ask which app). Replies are shown, not said, so Polly doesn't talk over the music. "I played tennis" is still something that happened.
 
 ## Places
 
@@ -167,7 +173,9 @@ yesterday", "when did I wake up", "what time did I have coffee": going to
 sleep is said ("went to bed") or worked out from a wake-up and the hours
 slept, and a night belongs to the evening it began; the phone's guess
 answers only when nothing was said. A question nothing answers is said so,
-never logged (`questions.other`).
+never logged (`questions.other`). Proton Calendar read through its share
+link, and adding opens Proton filled in. Music: play, pause, skip, louder,
+"play" anything.
 
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 

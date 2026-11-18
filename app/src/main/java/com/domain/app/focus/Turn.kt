@@ -2,6 +2,7 @@
 package com.domain.app.focus
 
 import android.content.Context
+import com.domain.app.calendar.LinkedCalendar
 import com.domain.app.core.data.DataRepository
 import com.domain.app.kronk.Kronk
 import com.domain.app.place.LocationState
@@ -29,6 +30,7 @@ interface Turn {
     val sense: PhoneSense
     val kronk: Kronk
     val location: LocationState
+    val calendar: LinkedCalendar
 
     /** Spoken, not typed: replies are said aloud. */
     val voice: Boolean
