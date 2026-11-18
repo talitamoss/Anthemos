@@ -1,17 +1,15 @@
 // app/src/main/java/com/domain/app/voice/RuleParser.kt
 package com.domain.app.voice
 
-import com.domain.app.calendar.Diary
 import com.domain.app.calendar.When
-import com.domain.app.place.Whereabouts
-import com.domain.app.sense.PhoneQuestion
 import java.time.LocalTime
 import java.time.ZonedDateTime
 
 /**
- * Works out what a sentence asks for, by rules (docs/anthemos-2.md, "Mind"):
- * undo, a change, a call, teaching a name, a question, or else something to keep.
- * Whatever is kept keeps its exact words; [RuleReader] finds the items in it.
+ * Works out what a sentence asks for, by rules (docs/anthemos-2.md, "Mind").
+ * Which commands there are, and the order they're tried in, is [Commands];
+ * this holds the reading shared by several of them. Whatever is kept keeps
+ * its exact words; [RuleReader] finds the items in it.
  *
  * Speech to text mishears, especially with accents ("call mum" comes out
  * "cool mum"), so commands accept what they are likely to be heard as.
@@ -22,27 +20,17 @@ class RuleParser(
 ) {
     private val reader = RuleReader(now)
 
-    fun parse(raw: String): VoiceRequest {
+    fun parse(raw: String): VoiceRequest = match(raw).request
+
+    /** The command a sentence was, and what it asks for. */
+    fun match(raw: String): Match {
         val transcript = raw.trim()
         val text = transcript.lowercase()
             .replace(Regex("[.!?,]"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
         val command = text.replace(POLITE, "").trim()
-
-        if (command in UNDO) return VoiceRequest.Undo(transcript)
-        Change.parse(command, today())?.let { return VoiceRequest.Edit(transcript, it) }
-        Whereabouts.parse(command, today())?.let { return VoiceRequest.Where(transcript, it) }
-        // "remind me to call dad at five" is a reminder, not a call now.
-        Diary.parseAdd(transcript, today())?.let { return VoiceRequest.AddEvent(transcript, it) }
-        call(transcript, command)?.let { return it }
-        teach(transcript, command)?.let { return it }
-        Diary.parseQuestion(transcript, today())?.let { return VoiceRequest.AskDiary(transcript, it) }
-        PhoneQuestion.parse(transcript, today())?.let { return VoiceRequest.AskPhone(transcript, it) }
-        Questions.parse(text, today())?.let { return VoiceRequest.Ask(transcript, it) }
-
-        if (NOTE.find(command) != null) return VoiceRequest.Record(transcript, emptyList(), "Noted", note = true)
-        return record(transcript)
+        return Commands.match(Said(transcript, text, command, today()), this)
     }
 
     /**
@@ -51,7 +39,7 @@ class RuleParser(
      * each is its own entry: a time covers its own part and the untimed
      * parts just before it; parts after the last time happened now.
      */
-    private fun record(transcript: String): VoiceRequest.Record {
+    internal fun record(transcript: String): VoiceRequest.Record {
         val now = today()
         val seps = SPLIT.findAll(transcript).toList()
         val starts = listOf(0) + seps.map { it.range.last + 1 }
@@ -89,7 +77,7 @@ class RuleParser(
         return "$what at ${CLOCK.format(at).lowercase()}$day"
     }
 
-    private fun call(transcript: String, text: String): VoiceRequest.Call? {
+    internal fun call(transcript: String, text: String): VoiceRequest.Call? {
         CALL.matchEntire(text)?.let { m ->
             val name = m.groupValues[2].trim()
             if (name.isEmpty()) return null
@@ -99,13 +87,13 @@ class RuleParser(
         return null
     }
 
-    private fun teach(transcript: String, text: String): VoiceRequest.Teach? {
+    internal fun teach(transcript: String, text: String): VoiceRequest.Teach? {
         val m = TEACH.matchEntire(text) ?: return null
         return VoiceRequest.Teach(transcript, m.groupValues[1], m.groupValues[2].trim())
     }
 
     companion object {
-        private val UNDO = setOf("undo", "undo that", "take that back", "delete that", "scratch that", "cancel that", "remove that")
+        internal val UNDO = setOf("undo", "undo that", "take that back", "delete that", "scratch that", "cancel that", "remove that")
         private val POLITE = Regex("^(?:(?:hey|ok|okay)\\s+)?(?:anthemos\\s+)?(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|i want to\\s+|i'd like to\\s+|i need to\\s+)*")
 
         // How "call" gets heard. These alone don't make a call: if no
@@ -124,6 +112,6 @@ class RuleParser(
         private val SPLIT = Regex("\\s*(?:[,;]|\\band then\\b|\\band\\b|\\bthen\\b|\\balso\\b|\\bplus\\b)\\s*", RegexOption.IGNORE_CASE)
         private val CLOCK = java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH)
         // Only these keep words as a note; anything else should be something specific.
-        private val NOTE = Regex("^(?:take a note|make a note|add a note|note to self|note that|note|remember that|remember|write down|write this down|jot down|journal|diary entry|dear diary)\\b")
+        internal val NOTE = Regex("^(?:take a note|make a note|add a note|note to self|note that|note|remember that|remember|write down|write this down|jot down|journal|diary entry|dear diary)\\b")
     }
 }

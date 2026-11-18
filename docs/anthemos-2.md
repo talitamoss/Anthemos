@@ -27,6 +27,17 @@ Fixed kinds (Food, Water, Caffeine...) lock us in: a sentence holds several thin
 
 Not on a big model on the phone, and not on a server we run for everyone: on **each person's own server**, the same one that holds their pod. Hosting and setting that up is the service people pay for. The phone does what it can alone (speech, rules, simple questions) and sends the rest to its owner's server: Whisper for harder speech, a language model as the better reader and for harder questions. No one else's server sees the words.
 
+## Commands
+
+Everything Anthemos understands is listed in one file, `voice/Commands.kt`, so what it does can be read in one place:
+
+- A **focus** is one area of what it does: Log, Notes, Change, Questions, Calendar, Calls, Phone, Places, Kronk.
+- Each focus has its **commands**, each with an id (`calendar.add`), one line on what it does, example sentences, and how it is recognised.
+- **One order** says which command is tried first. It crosses focuses on purpose: "remind me to call Dad" is the calendar before it is a call, "this is home" is a place before it is something to log, and anything left is logged.
+- `CommandsTest` checks that every example lands on its own command and that every command is in the order. Adding a command means adding it, with examples, to its focus and to the order; the test then shows if it takes over another command's sentences.
+
+What each command does once recognised is still in `ui/voice/VoiceViewModel.kt`. Moving that beside each focus is the next step.
+
 ## Prompts
 
 Anthemos asks about **gaps, not a script** (`prompts/PromptRules.kt`). A prompt fires only when something usual is missing from today:
