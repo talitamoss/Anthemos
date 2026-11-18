@@ -52,6 +52,15 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
                 items += Item("bed", "went to bed")
                 continue
             }
+            // The toilet: a moment, said plainly or politely.
+            if (POO.containsMatchIn(clause)) {
+                items += Item("toilet", "poo")
+                continue
+            }
+            if (WEE.containsMatchIn(clause)) {
+                items += Item("toilet", "wee")
+                continue
+            }
             val activity = activity(clause)
             if (activity != null) {
                 items += activity
@@ -212,6 +221,10 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
 
         private val WAKE = Regex("\\b(?:woke|woken|wake|waking|got|getting) up\\b|\\b(?:i'm|im|just) up\\b")
         private val BED = Regex("\\b(?:went|go|going|gone|got) to (?:bed|sleep)\\b|\\bfell asleep\\b|\\bhit the sack\\b")
+        private val POO = Regex(
+            "\\b(?:poo|poos|pooed|pooing|poop|pooped|pooping|number two|number 2|bowel movement|dump|shit|crap)\\b"
+        )
+        private val WEE = Regex("\\b(?:a wee|wee'd|weeing|pee|peed|peeing|a piss|pissed|number one|number 1|urinated)\\b")
         private val EAT = Regex("\\b(ate|eaten|eat|eating|snacked)\\b")
         private val HAD = Regex("\\b(had|have had|having|got|grabbed)\\b")
         private val VERB_START = Regex("^(i|we|it|went|was|is|did|made|met|saw|called)\\b")

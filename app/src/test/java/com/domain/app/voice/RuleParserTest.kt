@@ -160,4 +160,14 @@ class RuleParserTest {
         assertEquals(listOf("coffee"), labels("Hey Polly, I had a coffee"))
         assertEquals("I had a coffee", record("Hey Polly, I had a coffee").transcript)
     }
+
+    @Test
+    fun `the toilet, and Holly heard for Polly`() {
+        for (said in listOf("I'm doing a poo", "I did a poo", "Hey Holly, I did a poo", "just had a poop", "number two")) {
+            assertEquals(said, listOf("poo"), labels(said))
+        }
+        assertEquals(listOf("wee"), labels("I just had a wee"))
+        assertEquals(listOf("toilet"), record("I did a poo").items.map { it.kind })
+        assertEquals("Holly called me", record("Holly called me").transcript)
+    }
 }

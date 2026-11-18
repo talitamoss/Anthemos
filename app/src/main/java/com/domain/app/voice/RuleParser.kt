@@ -100,8 +100,12 @@ class RuleParser(
                 "(?:undo|delete|remove|cancel|erase|forget|scratch) (?:that|it|this|last entry|the previous (?:one|entry)|" +
                 "(?:the|my) last(?: one| entry| thing| log| note| record)?))(?: please)?$"
         )
-        private val NAME = Regex("^(?:(?:hey|ok|okay)[,\\s]+)?(?:anthemos|poly|polly|poli|pauly|paulie)\\b[,.!]*\\s*", RegexOption.IGNORE_CASE)
-        private val POLITE = Regex("^(?:(?:hey|ok|okay)\\s+)?(?:(?:anthemos|poly|polly|poli|pauly|paulie)\\s+)?(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|i want to\\s+|i'd like to\\s+|i need to\\s+)*")
+        // "Holly" is how Polly is often heard, but only after "hey": "Holly called" is someone.
+        private val NAME = Regex(
+            "^(?:(?:(?:hey|ok|okay)[,\\s]+)?(?:anthemos|poly|polly|poli|pauly|paulie)|(?:hey|ok|okay)[,\\s]+(?:holly|hollie|poley))\\b[,.!]*\\s*",
+            RegexOption.IGNORE_CASE
+        )
+        private val POLITE = Regex("^(?:(?:hey|ok|okay)\\s+)?(?:(?:anthemos|poly|polly|poli|pauly|paulie|holly)\\s+)?(?:please\\s+|can you\\s+|could you\\s+|would you\\s+|i want to\\s+|i'd like to\\s+|i need to\\s+)*")
 
         // How "call" gets heard. These alone don't make a call: if no
         // contact matches, the words are kept instead.

@@ -202,6 +202,10 @@ updates"; Speak's Settings button shows a dot when an update is ready.
 
 **2.18:** Timers, alarms, the torch, apps, battery, and the weather (above).
 
+**2.19:** The toilet is logged ("I did a poo", "just had a wee"; kind
+`toilet`), so "when did I last poo" answers. "Hey Holly" is heard as Hey
+Polly, only after "hey", so "Holly called" stays someone.
+
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 
 **What the phone already knows** (opt-in, each one separately):
