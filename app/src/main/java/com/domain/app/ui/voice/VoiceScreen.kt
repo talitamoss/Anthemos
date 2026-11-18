@@ -114,6 +114,18 @@ fun VoiceScreen(
         if (listenRequest > 0) talk()
     }
 
+    // A place, the trail or live sharing needs location: ask, then carry on.
+    val locationAsk = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        viewModel.locationAnswered(result[Manifest.permission.ACCESS_FINE_LOCATION] == true)
+    }
+    LaunchedEffect(state.askLocation) {
+        if (state.askLocation) {
+            locationAsk.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
+    }
+
     var typing by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
     val prefs = remember { context.getSharedPreferences("anthemos_prompts", Context.MODE_PRIVATE) }
@@ -234,11 +246,17 @@ fun VoiceScreen(
             }
         }
 
-        if (state.pendingCall != null || state.pendingEvent != null) {
+        if (state.pendingCall != null || state.pendingEvent != null || state.pendingShare != null) {
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { viewModel.confirm(true) }) {
-                    Text(if (state.pendingCall != null) "Yes, call" else "Yes, add")
+                    Text(
+                        when {
+                            state.pendingShare != null -> "Yes, share"
+                            state.pendingCall != null -> "Yes, call"
+                            else -> "Yes, add"
+                        }
+                    )
                 }
                 OutlinedButton(onClick = { viewModel.confirm(false) }) { Text("No") }
             }
@@ -325,6 +343,7 @@ internal fun summary(entry: Entry): String? {
     return entry.items.joinToString(", ") { item ->
         when {
             item.kind == "call" -> "Called ${item.label}"
+            item.kind == "place" -> entry.words
             item.minutes != null -> "${item.label}, ${item.minutes} min"
             item.ml != null && item.label == "water" -> "water, ${item.ml} ml"
             item.count > 1 -> "${item.count} ${item.label}"

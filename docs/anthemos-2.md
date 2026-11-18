@@ -58,6 +58,24 @@ Proton Calendar is end-to-end encrypted and doesn't share its events with Androi
 - **After events:** "How was the dentist?" within three hours of the end, as a prompt (same limits; "Stop asking this" stops them all).
 - Later: sync to the person's own server (CalDAV), which Proton can subscribe to.
 
+## Places
+
+Location stays on the phone. No map service is asked where anything is or what it is called (Tal, 2026-11-18: not OSM's public server).
+
+- **The trail:** "start tracking" and "stop tracking". A foreground service (`place/LocationService.kt`, with a notification while it runs) takes a reading every two minutes or on moving 50 m, from plain GPS and the phone's own network location (GrapheneOS has no Google location service). Readings are kept in the encrypted store (pluginId `trail`). Time spent in one spot, ten minutes or more within 150 m, becomes an entry the phone noticed: "At home, 6:00 pm to 8:10 am" (`place/Geo.kt`).
+- **Places are named by voice:** "this is home", "this is mum's place", "call this place the gym", "save this place as work". "This is..." only names a place when it sounds like one, so "this is my third coffee" is still a coffee.
+- **Questions:** "Where am I?" (a named place, or how far you are from the nearest one), "Where was I yesterday?"
+- **Later:** walks and rides as trips between stays; OsmAnd track recording ("start recording"), imported for the full route.
+
+## Kronk
+
+Anthemos links to Kronk once, and from then on what it shares is signed by the phone (Kronk's `docs/spaces/map.md`, Live location, and `docs/decisions.md`, 2026-11-18).
+
+- **Connect:** "connect to Kronk" opens Kronk's sign-in in the browser (OAuth; Anthemos registers itself as an app). Coming back (`anthemos://kronk`), it makes a P-256 key in the Android Keystore, which never leaves the phone, and gives Kronk the public half, signed to prove it holds the key. The token is kept in encrypted preferences (`kronk/Kronk.kt`). The server is shadow.kronk.info until live location is released to kronk.info.
+- **Live location:** "share my location with Ana for an hour", "let Dad see where I am until five", "share my live location with Ana and Sam". It finds them among your Kronk Mates, asks "Share your exact location with Ana Lee until 4:00 pm?", and only on yes starts. An hour unless said, a day at most. The location service then sends a signed reading about every 30 seconds; the notification says who sees it and has Stop sharing. "Stop sharing" or "stop sharing with Ana" ends it, as does Stop in Kronk's Account & Security.
+- **On Kronk** the Mates named get a nudge and see you live on the Map, exact, with "From Anthemos, signed by their phone". Kronk keeps only the latest point, until the share ends. For now Kronk's server can read it as it passes; next, it is encrypted to viewers who use Anthemos.
+- **Later:** the same link carries other shares (treks, sleep, mood) as signed, revocable permissions.
+
 ## Pieces
 
 1. **Ears.** Anthemos registers as the phone's default assistant (`VoiceInteractionService`), so a headset or steering-wheel button opens it. Push to talk first; a wake word is optional later. Speech becomes text on the phone (Whisper via whisper.cpp, or Android's on-device recogniser).
@@ -118,10 +136,12 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 **alpha 11:** nothing is a note unless asked for ("take a note", "note to self", "remember", "write down", "dear diary"). Anything else with nothing found in it asks "Try again, or keep it as a note?"; something found in words the recogniser wasn't sure of asks "log coffee? Say yes, or try again."
 
+**alpha 12:** places and the trail, and live location through Kronk (above, Places and Kronk).
+
 **What the phone already knows** (opt-in, each one separately):
 - **Screen time** (alpha 5, `sense/PhoneSense.kt`): from Android's usage access, turned on in Settings from a card on Speak. Android greys out the switch for apps installed outside a store until App info, ⋮, Allow restricted settings; the card says so after the first try, with an App info button. "How much screen time today?" answers with the total and the top three apps; each morning yesterday's total is kept as an entry (source "phone").
 - **Sleep, estimated** (alpha 5): the longest gap in phone use overnight (6 pm to 1 pm, three hours or more; glances under five minutes ignored). The morning prompt says "Phone down at 11:10 pm, up at 6:40 am. How did you sleep?" and keeps those hours if the answer gives none. "How long did I sleep?" answers from it.
-- **Location:** places rather than raw tracks: home, work, "a new place", time spent, from the phone's own location (GrapheneOS has its own network location). OsmAnd tracks for walks and rides.
+- **Location** (alpha 12): stays at places named by voice, from the trail when it's on (above, Places).
 - **Steps:** the phone's step counter sensor, no Google Fit.
 
 **Not yet:** signatures on entries, the on-device language model, spoken questions, the full default-assistant role (`VoiceInteractionService`), a wake word, pod sync.

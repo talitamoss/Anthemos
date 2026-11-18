@@ -75,6 +75,12 @@ sealed class VoiceRequest {
         val change: Change
     ) : VoiceRequest()
 
+    /** Places, the trail, and sharing where you are (docs/anthemos-2.md, "Places"). */
+    data class Where(
+        override val transcript: String,
+        val ask: com.domain.app.place.Whereabouts
+    ) : VoiceRequest()
+
     /** Take back the last entry. */
     data class Undo(override val transcript: String) : VoiceRequest()
 }

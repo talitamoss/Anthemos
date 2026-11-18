@@ -13,6 +13,15 @@ import com.domain.app.core.data.DataRepository
 import com.domain.app.calendar.Diary
 import com.domain.app.calendar.Event
 import com.domain.app.calendar.Reminders
+import com.domain.app.kronk.Kronk
+import com.domain.app.kronk.KronkInbox
+import com.domain.app.place.Geo
+import com.domain.app.place.Here
+import com.domain.app.place.LiveShare
+import com.domain.app.place.LocationService
+import com.domain.app.place.LocationState
+import com.domain.app.place.Place
+import com.domain.app.place.Whereabouts
 import com.domain.app.prompts.Prompt
 import com.domain.app.sense.PhoneAnswers
 import com.domain.app.sense.PhoneQuestion
@@ -76,8 +85,14 @@ data class VoiceUiState(
     /** A change that fits more than one entry, waiting for which. */
     val choosing: Changes.Outcome.Choose? = null,
     /** Words that didn't make sense, waiting for "keep it" or another try. */
-    val unsure: VoiceRequest.Record? = null
+    val unsure: VoiceRequest.Record? = null,
+    /** Live location waiting for yes or no: it leaves the phone. */
+    val pendingShare: PendingShare? = null,
+    /** Location permission is needed: the screen asks for it. */
+    val askLocation: Boolean = false
 )
+
+data class PendingShare(val mates: List<Kronk.Mate>, val until: ZonedDateTime)
 
 data class PendingCall(val match: Contacts.Match, val said: String)
 
@@ -99,6 +114,10 @@ class VoiceViewModel @Inject constructor(
     private val contacts = Contacts(context)
     private val promptLog = PromptLog(context)
     private val sense = PhoneSense(context)
+    private val kronk = Kronk(context)
+    private val location = LocationState(context)
+    /** What to do once location permission is answered. */
+    private var afterLocation: Whereabouts? = null
     /** Whether this turn was spoken: typed turns aren't answered aloud. */
     private var voice = true
     private var lastSavedId: String? = null
@@ -121,6 +140,14 @@ class VoiceViewModel @Inject constructor(
     init {
         listener.prepare()
         refreshSense()
+        // Back from signing in to Kronk in the browser.
+        viewModelScope.launch {
+            KronkInbox.code.collect { code ->
+                code ?: return@collect
+                KronkInbox.code.value = null
+                if (code.isEmpty()) reply("Kronk didn't sign you in") else finishKronk(code)
+            }
+        }
     }
 
     fun listen() {
@@ -166,6 +193,10 @@ class VoiceViewModel @Inject constructor(
     /** Yes or no to a pending call or event, by tap. */
     fun confirm(yes: Boolean) {
         listener.cancel()
+        _state.value.pendingShare?.let { share ->
+            if (yes) viewModelScope.launch { startSharing(share) } else replyShare("Okay, not sharing")
+            return
+        }
         _state.value.pendingEvent?.let { event ->
             if (yes) viewModelScope.launch { addEvent(event) } else reply("Okay, not added", pendingEvent = null)
             return
@@ -210,6 +241,16 @@ class VoiceViewModel @Inject constructor(
                 lower in NO || AGAIN.containsMatchIn(lower) -> retry()
                 // Anything else is the second try.
                 else -> handle(text, unclear)
+            }
+            return
+        }
+        _state.value.pendingShare?.let { share ->
+            val lower = text.lowercase()
+            when {
+                NO.any { Regex("\\b$it\\b").containsMatchIn(lower) } -> replyShare("Okay, not sharing")
+                YES.any { Regex("\\b$it\\b").containsMatchIn(lower) } || lower.contains("share") ->
+                    viewModelScope.launch { startSharing(share) }
+                else -> confirmShare(share)
             }
             return
         }
@@ -271,8 +312,165 @@ class VoiceViewModel @Inject constructor(
                 reply(Diary.answer(request.question, events(), ZonedDateTime.now()))
             }
             is VoiceRequest.AskPhone -> answerPhone(request.question)
+            is VoiceRequest.Where -> viewModelScope.launch { where(request.ask) }
         }
     }
+
+    // ── Places, the trail, and live sharing (docs/anthemos-2.md, "Places") ──
+
+    /** The screen asked for location: carry on with what needed it. */
+    fun locationAnswered(granted: Boolean) {
+        _state.update { it.copy(askLocation = false) }
+        val waiting = afterLocation ?: return
+        afterLocation = null
+        if (granted) viewModelScope.launch { where(waiting) } else reply("I need your location for that")
+    }
+
+    private suspend fun where(ask: Whereabouts) {
+        val needsLocation = ask is Whereabouts.Name || ask is Whereabouts.WhereAmI || ask is Whereabouts.Share ||
+            (ask is Whereabouts.Trail && ask.on)
+        if (needsLocation && !LocationService.allowed(context)) {
+            afterLocation = ask
+            _state.update { it.copy(askLocation = true) }
+            return
+        }
+        when (ask) {
+            is Whereabouts.Name -> namePlace(ask.name)
+            Whereabouts.WhereAmI -> {
+                val here = Here.now(context) ?: return reply("I can't tell where you are right now")
+                val place = Geo.describe(places(), here.lat, here.lng)
+                reply(if (place.startsWith("somewhere")) "You're $place. Say this is, and a name, to name it." else "You're at $place")
+            }
+            is Whereabouts.WhereWas -> reply(whereWas(ask))
+            is Whereabouts.Trail -> {
+                location.trail = ask.on
+                LocationService.refresh(context)
+                reply(if (ask.on) "Keeping your trail, only on this phone" else "Stopped keeping your trail")
+            }
+            is Whereabouts.Share -> prepareShare(ask)
+            is Whereabouts.StopSharing -> stopSharing(ask.name)
+            Whereabouts.LinkKronk -> linkKronk()
+        }
+    }
+
+    private suspend fun places(): List<Place> = withContext(Dispatchers.IO) {
+        dataRepository.getPluginData(Place.PLUGIN_ID).first().mapNotNull(Place::from)
+    }
+
+    /** "This is home": names where the phone is, or moves the name here. */
+    private suspend fun namePlace(name: String) {
+        val here = Here.now(context) ?: return reply("I can't tell where you are right now")
+        val all = places()
+        val same = all.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        val place = same?.copy(lat = here.lat, lng = here.lng)
+            ?: Geo.placeAt(all, here.lat, here.lng)?.copy(name = name)
+            ?: Place.named(name, here)
+        withContext(Dispatchers.IO) { dataRepository.saveDataPoint(place.toDataPoint()) }
+        lastSavedId = place.id
+        lastTurn = listOf(place.id)
+        _state.update { it.copy(canUndo = true) }
+        reply("Saved this place as $name")
+    }
+
+    /** "Yesterday: home until 8:10 am, the gym 9:00 to 10:15 am." */
+    private suspend fun whereWas(ask: Whereabouts.WhereWas): String {
+        val zone = ZoneId.systemDefault()
+        val from = ask.day.atStartOfDay(zone).toInstant()
+        val until = ask.day.plusDays(1).atStartOfDay(zone).toInstant()
+        val stays = withContext(Dispatchers.IO) {
+            dataRepository.getPluginData(Entry.PLUGIN_ID).first().mapNotNull(Entry::from)
+        }.filter { e -> e.source == "phone" && e.items.any { it.kind == "place" } && e.time >= from && e.time < until }
+            .sortedBy { it.time }
+        if (stays.isEmpty()) {
+            return if (location.trail) "Nothing kept ${ask.phrase} yet" else "I haven't kept a trail. Say start tracking."
+        }
+        val said = stays.joinToString("; ") { e -> e.words.removePrefix("At ").removePrefix("Stayed ") }
+        return "${ask.phrase.replaceFirstChar { it.uppercase() }}: $said"
+    }
+
+    /** Finds the Mates named, then asks before anything leaves the phone. */
+    private suspend fun prepareShare(ask: Whereabouts.Share) {
+        if (!kronk.linked) return reply("Connect to Kronk first. Say connect to Kronk.")
+        val found = mutableListOf<Kronk.Mate>()
+        for (name in ask.names) {
+            val matches = try {
+                withContext(Dispatchers.IO) { kronk.mates(name) }
+            } catch (e: Exception) {
+                return reply(e.message ?: "I couldn't reach Kronk")
+            }
+            val exact = matches.filter { m ->
+                m.name.equals(name, ignoreCase = true) || m.handle.equals(name.replace(" ", ""), ignoreCase = true) ||
+                    m.name.substringBefore(' ').equals(name, ignoreCase = true)
+            }
+            val pick = exact.singleOrNull() ?: matches.singleOrNull()
+            when {
+                pick != null -> found += pick
+                matches.isEmpty() -> return reply("I can't find a Mate called $name on Kronk")
+                else -> return reply("Which $name: ${matches.take(3).joinToString(" or ") { it.name }}? Say it again with their full name.")
+            }
+        }
+        confirmShare(PendingShare(found.distinctBy { it.id }, ask.until))
+    }
+
+    private fun confirmShare(share: PendingShare) {
+        val question = "Share your exact location with ${names(share.mates)} until ${clock(share.until)}?"
+        _state.update { it.copy(phase = VoicePhase.CONFIRMING, reply = question, pendingShare = share) }
+        speakThen(question) { if (_state.value.pendingShare == share) listen() }
+    }
+
+    private suspend fun startSharing(share: PendingShare) {
+        val id = try {
+            withContext(Dispatchers.IO) { kronk.startSharing(share.mates, share.until.toInstant()) }
+        } catch (e: Exception) {
+            return replyShare(e.message ?: "I couldn't reach Kronk")
+        }
+        location.shares = location.shares + LiveShare(id, share.mates.map { it.name }, share.until.toInstant())
+        LocationService.refresh(context)
+        replyShare("Sharing with ${names(share.mates)} until ${clock(share.until)}. Say stop sharing to end it.")
+    }
+
+    private suspend fun stopSharing(name: String?) {
+        val shares = location.shares
+        val ending = if (name == null) shares else shares.filter { s -> s.names.any { it.contains(name, ignoreCase = true) } }
+        if (ending.isEmpty()) return reply(if (name == null) "You're not sharing your location" else "You're not sharing with $name")
+        location.shares = shares - ending.toSet()
+        LocationService.refresh(context)
+        withContext(Dispatchers.IO) { ending.forEach { runCatching { kronk.stopSharing(it.id) } } }
+        reply("Stopped sharing with ${ending.flatMap { it.names }.distinct().joinToString(" and ")}")
+    }
+
+    private suspend fun linkKronk() {
+        if (kronk.linked) return reply("Already connected to Kronk")
+        val page = try {
+            withContext(Dispatchers.IO) { kronk.signInPage() }
+        } catch (e: Exception) {
+            return reply(e.message ?: "I couldn't reach Kronk")
+        }
+        context.startActivity(Intent(Intent.ACTION_VIEW, page).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        reply("Sign in to Kronk in the browser, then come back here")
+    }
+
+    private suspend fun finishKronk(code: String) {
+        try {
+            withContext(Dispatchers.IO) { kronk.finishSignIn(code) }
+            reply("Connected to Kronk. Say share my location with, and a Mate's name.")
+        } catch (e: Exception) {
+            reply(e.message ?: "I couldn't finish connecting to Kronk")
+        }
+    }
+
+    private fun replyShare(text: String) {
+        _state.update { it.copy(pendingShare = null) }
+        reply(text)
+    }
+
+    private fun names(mates: List<Kronk.Mate>) = when (mates.size) {
+        1 -> mates[0].name
+        else -> mates.dropLast(1).joinToString(", ") { it.name } + " and " + mates.last().name
+    }
+
+    private fun clock(at: ZonedDateTime) =
+        java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH).format(at).lowercase()
 
     private suspend fun events(): List<Event> = withContext(Dispatchers.IO) {
         dataRepository.getPluginData(Event.PLUGIN_ID).first().mapNotNull(Event::from)
@@ -617,7 +815,7 @@ class VoiceViewModel @Inject constructor(
     }
 
     private fun phaseFor(s: VoiceUiState) =
-        if (s.pendingCall != null || s.pendingEvent != null) VoicePhase.CONFIRMING else VoicePhase.IDLE
+        if (s.pendingCall != null || s.pendingEvent != null || s.pendingShare != null) VoicePhase.CONFIRMING else VoicePhase.IDLE
 
     private fun granted(permission: String) =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED

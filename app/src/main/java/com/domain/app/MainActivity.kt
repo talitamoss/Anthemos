@@ -12,6 +12,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.domain.app.kronk.KronkInbox
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.ui.components.navigation.AnthemosBottomBar
 import com.domain.app.ui.dashboard.DashboardScreen
@@ -31,6 +32,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) noteListen(intent)
+        KronkInbox.receive(intent)
         setContent {
             AppTheme {
                 MainScreen(listenRequest)
@@ -41,6 +43,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         noteListen(intent)
+        KronkInbox.receive(intent)
     }
 
     private fun noteListen(intent: Intent?) {

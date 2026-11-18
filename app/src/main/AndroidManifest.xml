@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The trail and live sharing (docs/anthemos-2.md, "Places"): plain GPS
+         and network location, followed by a foreground service. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- Anthemos 2.0: find a contact by name and call them, after a yes -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -64,8 +70,19 @@
                 <action android:name="com.anthemos.LISTEN" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- Back from signing in to Kronk. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="anthemos" android:host="kronk" />
+            </intent-filter>
         </activity>
 
+        <service
+            android:name=".place.LocationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
         <receiver android:name=".update.UpdateReceiver" android:exported="false" />
         <receiver android:name=".prompts.PromptActionReceiver" android:exported="false" />
         <receiver android:name=".calendar.ReminderReceiver" android:exported="false" />

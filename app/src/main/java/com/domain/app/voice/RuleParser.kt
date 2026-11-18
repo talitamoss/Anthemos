@@ -3,6 +3,7 @@ package com.domain.app.voice
 
 import com.domain.app.calendar.Diary
 import com.domain.app.calendar.When
+import com.domain.app.place.Whereabouts
 import com.domain.app.sense.PhoneQuestion
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -31,6 +32,7 @@ class RuleParser(
 
         if (command in UNDO) return VoiceRequest.Undo(transcript)
         Change.parse(command, today())?.let { return VoiceRequest.Edit(transcript, it) }
+        Whereabouts.parse(command, today())?.let { return VoiceRequest.Where(transcript, it) }
         // "remind me to call dad at five" is a reminder, not a call now.
         Diary.parseAdd(transcript, today())?.let { return VoiceRequest.AddEvent(transcript, it) }
         call(transcript, command)?.let { return it }
