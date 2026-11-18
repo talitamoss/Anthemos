@@ -68,6 +68,67 @@ Anthemos asks about **gaps, not a script** (`prompts/PromptRules.kt`). A prompt 
 - **One follow-up per entry** when an obvious detail is missing: how long a walk was, how many hours of sleep, how much something bought cost. The answer fills in that entry.
 - Later, the reader on the person's own server words prompts and follow-ups from context ("the bus was late again, third time this week").
 
+## A day in detail
+
+Planned (Tal, 2026-11-18): someone should be able to record their day in great detail by voice. What the phone can notice it keeps itself, with permission; everything else Polly must recognise when said, and ask after what's missing.
+
+**What the phone can notice** (each behind its own permission, off until allowed):
+
+| Thing | From | Status |
+|---|---|---|
+| Screen time, app use | usage access | built |
+| Phone down and picked up (sleep guess) | usage access | built |
+| Places, stays, travel, time away from home | location | built |
+| Calls made, received, missed: who, how long | call log (`READ_CALL_LOG`) | not built; only calls made through Anthemos now |
+| Texts sent and received (SMS only, counts) | SMS log | not built; Signal and WhatsApp can't be read |
+| Steps | step counter (`ACTIVITY_RECOGNITION`) | not built |
+| Walking, running, cycling, driving | steps and speed from location | not built; Google's activity recognition needs Play services |
+| Music listened to | media sessions (notification access) | not built |
+| Photos taken: when and where | photos (`READ_MEDIA_IMAGES`) | not built |
+| Meetings and events | Proton link, own calendar | built |
+| Weather that day | Open-Meteo | built, as an answer only |
+
+**What has to be said**, and the follow-up when a detail is missing. At most two follow-ups per entry, each only if the detail wasn't said; "skip" or no answer ends it. Status: **built** (recognised and asked), **logged** (recognised, no follow-up yet), **new** (kept only as a note today).
+
+| Said | Follow-up | Then | Status |
+|---|---|---|---|
+| A meal with nothing in it ("I had lunch") | What did you have? | | built |
+| Woke up | How many hours did you sleep? | How did you sleep? | built |
+| Went to bed | | | logged |
+| A walk, run, swim, gym, yoga, nap with no time | How long for? | | built |
+| A walk, run or ride | How long for? | How far? | new (distance) |
+| Gym or a workout | How long for? | What did you work on? | new (the second) |
+| A sport ("played tennis") | How long for? | Who with? | new |
+| Spending with no amount | How much was it? | | built |
+| Spending with no thing ("spent $40") | What on? | | new |
+| Coffee, tea, food, water, alcohol | (alcohol with no count) How many? | | logged; new (count) |
+| Water with no amount | How many glasses? | | new |
+| Poo or wee | | | logged |
+| Medication, vitamins | What did you take? | How much? | new |
+| Pain, headache, feeling sick | How bad, out of ten? | Where? (pain) | new |
+| Period started or ended | Light, medium or heavy? | | new |
+| Weight | | | new |
+| Mood ("feeling flat", "great day") | Out of ten? | Anything behind it? | new |
+| Energy, stress, anxiety | Out of ten? | | new |
+| Grateful for | | | new |
+| A dream | | | new |
+| Saw someone ("caught up with Sam") | How was it? | | new |
+| Saw someone with no name ("met a friend") | Who was it? | How was it? | new |
+| A meeting | Who was it with? | What was it about? | new |
+| A call not made through Anthemos | Who was it with? | Anything to remember? | new |
+| Worked, or worked on something | How long for? | On what? | new |
+| A task done ("finished the report") | | | new |
+| Studied or read | What was it? | How long for? | new |
+| Watched or listened to something | What was it? | | new |
+| Cooked | What did you make? | | new |
+| Groceries | How much did it come to? | | new |
+| Chores: cleaning, laundry, dishes | | | new |
+| Watered plants, fed or walked the pet | | | new |
+| Time outside, in the sun | How long for? | | new |
+| Sex | (never asked) | | new |
+
+**Prompts from what the phone noticed** (planned): after a long call outside Anthemos, "Anything to remember from the call with X?"; in the evening, for a stay at a place with no name, "What were you doing at <street>?"; on a day with few steps and no activity said, the existing "Get outside or move today?".
+
 ## Calendar
 
 Proton Calendar is end-to-end encrypted and doesn't share its events with Android's calendar store, so no other app can read or add to it. Anthemos keeps **its own calendar in its encrypted store** (`calendar/`), and hands each event to Proton with one tap ("Also add to Proton", Android's standard new-event request; it works if Proton accepts it).
