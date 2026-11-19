@@ -85,14 +85,16 @@ sealed class Whereabouts {
             return Share(names, minOf(until, now.plusMinutes(LONGEST_MINUTES)))
         }
 
-        private val LINK = Regex("^(?:connect|link|sign in|log in|hook up)(?: (?:to|with|up to|up with|into))? kronk$|^(?:connect|link) (?:me|anthemos) (?:to|with) kronk$")
+        /** Kronk as the speech model hears it: it doesn't know the word. */
+        const val KRONK = "(?:kronk|cronk|crank|krank|crunk|krunk|conk|kronck|cronck|cranck)"
+        private val LINK = Regex("^(?:connect|link|sign in|log in|hook up)(?: (?:to|with|up to|up with|into))? $KRONK$|^(?:connect|link) (?:me|anthemos) (?:to|with) $KRONK$")
         private val WHERE_AM_I = Regex("^(?:where am i|where are we|where am i now|what(?:'s| is) this place|what place is this)(?: now| right now)?$")
         private val WHERE_WAS = Regex("^where (?:was i|have i been|did i go)(.*)$")
         private val TRAIL_ON = Regex("^(?:start|turn on|switch on|keep) (?:tracking|my trail|the trail|location|my location|tracking me|tracking my location)$|^track (?:me|my location|where i go)$")
         private val TRAIL_OFF = Regex("^(?:stop|turn off|switch off|pause) (?:tracking|my trail|the trail|location|tracking me|tracking my location)$|^don't track (?:me|my location)$")
-        private val STOP = Regex("^stop sharing(?: my)?(?: live)?(?: location| tracking| position)?(?: with (.+?))?(?: on kronk| through kronk| via kronk)?$")
+        private val STOP = Regex("^stop sharing(?: my)?(?: live)?(?: location| tracking| position)?(?: with (.+?))?(?: (?:on|through|via) $KRONK)?$")
         /** "...on Kronk": where it goes, not part of a name. */
-        private val ON_KRONK = Regex("\\s+(?:on|through|via|using) kronk\\b")
+        private val ON_KRONK = Regex("\\s+(?:on|through|via|using) $KRONK\\b")
         // The name is always group 1 and how long group 2.
         private val SHARE = listOf(
             Regex("^(?:share|send|start) (?:my )?(?:live )?(?:location|tracking|position|whereabouts|where i am) (?:with|to|for) (.+?)( (?:for|until|till|til) .+)?$"),

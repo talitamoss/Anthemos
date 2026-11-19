@@ -73,6 +73,8 @@ class WhereaboutsTest {
         assertEquals(Whereabouts.StopSharing(null), where("stop sharing my location"))
         assertEquals(Whereabouts.StopSharing("ana"), where("stop sharing with Ana"))
         assertEquals(Whereabouts.LinkKronk, where("connect to Kronk"))
+        assertEquals(Whereabouts.LinkKronk, where("connect to crank"))
+        assertEquals(listOf("pago"), (where("share my location with pago on cronk") as Whereabouts.Share).names)
         assertNull(Whereabouts.parse("i had a coffee", now))
     }
 }

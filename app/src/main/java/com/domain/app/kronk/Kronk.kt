@@ -122,7 +122,7 @@ class Kronk(private val context: Context) {
             .apply()
     }
 
-    fun forget() = prefs.edit().remove(TOKEN).remove(LINK_ID).remove(ACCOUNT).remove(SHARES).apply()
+    fun forget() = prefs.edit().remove(TOKEN).remove(LINK_ID).remove(ACCOUNT).remove(SHARES).remove(MATES).apply()
 
     // ── Mates and live location ───────────────────────────────────────
 
@@ -130,11 +130,40 @@ class Kronk(private val context: Context) {
     fun mates(words: String): List<Mate> {
         val url = "$server/api/v1/kommunity/mates".toHttpUrl().newBuilder()
             .addQueryParameter("q", words).addQueryParameter("limit", "10").build()
-        val rows = JSONArray(call(Request.Builder().url(url).get()))
-        return (0 until rows.length()).map { i ->
-            val a = rows.getJSONObject(i)
-            Mate(a.getString("id"), a.optString("display_name").ifBlank { a.getString("username") }, a.getString("acct"))
+        return matesFrom(JSONArray(call(Request.Builder().url(url).get())))
+    }
+
+    /**
+     * Every Mate, kept on the phone for a day so names can be matched by how
+     * they sound ([SoundsLike]); [fresh] asks Kronk again.
+     */
+    fun allMates(fresh: Boolean = false): List<Mate> {
+        val kept = prefs.getString(MATES, null)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        if (!fresh && kept != null && System.currentTimeMillis() - kept.optLong("at") < MATES_KEPT_MS) return matesFrom(kept.getJSONArray("mates"))
+        val all = mutableListOf<Mate>()
+        var offset = 0
+        while (offset < MATES_MOST) {
+            val url = "$server/api/v1/kommunity/mates".toHttpUrl().newBuilder()
+                .addQueryParameter("limit", "80").addQueryParameter("offset", offset.toString()).build()
+            val page = matesFrom(JSONArray(call(Request.Builder().url(url).get())))
+            all += page
+            if (page.size < 80) break
+            offset += 80
         }
+        val rows = JSONArray(all.map { JSONObject().put("id", it.id).put("display_name", it.name).put("acct", it.handle) })
+        prefs.edit().putString(MATES, JSONObject().put("at", System.currentTimeMillis()).put("mates", rows).toString()).apply()
+        return all
+    }
+
+    /** How many Mates are kept on the phone. */
+    val keptMates: Int get() = prefs.getString(MATES, null)?.let { runCatching { JSONObject(it).getJSONArray("mates").length() }.getOrNull() } ?: 0
+
+    /** One account, by id, as a Mate (for a share started on Kronk). */
+    fun account(id: String): Mate = matesFrom(JSONArray().put(JSONObject(get("/api/v1/accounts/$id")))).first()
+
+    private fun matesFrom(rows: JSONArray) = (0 until rows.length()).map { i ->
+        val a = rows.getJSONObject(i)
+        Mate(a.getString("id"), a.optString("display_name").ifBlank { a.optString("username").ifBlank { a.getString("acct") } }, a.getString("acct"))
     }
 
     /** Starts sharing with [mates] until [until]; returns the share's id. */
@@ -270,6 +299,9 @@ class Kronk(private val context: Context) {
         private const val ACCOUNT = "account"
         private const val LINK_ID = "link_id"
         private const val SHARES = "shares"
+        private const val MATES = "mates"
+        private const val MATES_KEPT_MS = 24 * 60 * 60 * 1000L
+        private const val MATES_MOST = 800
     }
 }
 
@@ -280,9 +312,19 @@ class Kronk(private val context: Context) {
 object KronkInbox {
     val code = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
+    /** "Share live location" tapped on Kronk's Map: anthemos://kronk/share?to=<account id>&server=<host>. */
+    data class Share(val to: String, val server: String)
+
+    val share = kotlinx.coroutines.flow.MutableStateFlow<Share?>(null)
+
     fun receive(intent: android.content.Intent?) {
         val data = intent?.data ?: return
         if (data.scheme != "anthemos" || data.host != "kronk") return
+        if (data.path == "/share") {
+            val to = data.getQueryParameter("to")?.takeIf { it.all(Char::isDigit) && it.isNotEmpty() } ?: return
+            share.value = Share(to, data.getQueryParameter("server").orEmpty())
+            return
+        }
         code.value = data.getQueryParameter("code") ?: ""
     }
 }

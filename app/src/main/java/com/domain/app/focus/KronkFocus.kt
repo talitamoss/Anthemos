@@ -5,6 +5,8 @@ import android.content.Intent
 import com.domain.app.focus.PlacesFocus.where
 import com.domain.app.focus.PlacesFocus.withLocation
 import com.domain.app.kronk.Kronk
+import com.domain.app.kronk.KronkInbox
+import com.domain.app.kronk.SoundsLike
 import com.domain.app.place.LiveShare
 import com.domain.app.place.LocationService
 import com.domain.app.place.Whereabouts
@@ -32,7 +34,7 @@ object KronkFocus {
         )
     )
 
-    private suspend fun Turn.connect() {
+    suspend fun Turn.connect() {
         if (kronk.linked) return reply("Already connected to Kronk")
         val page = try {
             withContext(Dispatchers.IO) { kronk.signInPage() }
@@ -47,7 +49,10 @@ object KronkFocus {
     suspend fun Turn.finishConnecting(code: String) {
         if (code.isEmpty()) return reply("Kronk didn't sign you in")
         try {
-            withContext(Dispatchers.IO) { kronk.finishSignIn(code) }
+            withContext(Dispatchers.IO) {
+                kronk.finishSignIn(code)
+                runCatching { kronk.allMates(fresh = true) }
+            }
             reply("Connected to Kronk. Say share my location with, and a Mate's name.")
         } catch (e: Exception) {
             reply(e.message ?: "I couldn't finish connecting to Kronk")
@@ -60,18 +65,13 @@ object KronkFocus {
         val found = mutableListOf<Kronk.Mate>()
         for (name in ask.names) {
             val matches = try {
-                withContext(Dispatchers.IO) { kronk.mates(name) }
+                withContext(Dispatchers.IO) { mateFor(name) }
             } catch (e: Exception) {
                 return@withLocation reply(e.message ?: "I couldn't reach Kronk")
             }
-            val exact = matches.filter { m ->
-                m.name.equals(name, ignoreCase = true) || m.handle.equals(name.replace(" ", ""), ignoreCase = true) ||
-                    m.name.substringBefore(' ').equals(name, ignoreCase = true)
-            }
-            val pick = exact.singleOrNull() ?: matches.singleOrNull()
-            when {
-                pick != null -> found += pick
-                matches.isEmpty() -> return@withLocation reply("I can't find a Mate called $name on Kronk")
+            when (matches.size) {
+                1 -> found += matches[0]
+                0 -> return@withLocation reply("I can't find a Mate called $name on Kronk. You can share from Kronk's Map too: Place me, then Share live location.")
                 else -> return@withLocation reply("Which $name: ${matches.take(3).joinToString(" or ") { it.name }}? Say it again with their full name.")
             }
         }
@@ -81,6 +81,45 @@ object KronkFocus {
                 "Share your exact location with ${names(mates)} until ${clock(ask.until)}?",
                 "Yes, share", "Okay, not sharing", yesWords = listOf("share")
             ) { start(mates, ask.until) }
+        )
+    }
+
+    /**
+     * The Mates [name] could be. Names are matched by how they sound against
+     * the Mates kept on the phone, since the speech model hears an unusual
+     * name as a word it knows ("pago" for Pargo); then Kronk's own search,
+     * then the kept Mates again, asked fresh, for someone new.
+     */
+    private fun Turn.mateFor(name: String): List<Kronk.Mate> {
+        fun bySound(mates: List<Kronk.Mate>) =
+            SoundsLike.find(name, mates) { listOf(it.name, it.handle.substringBefore('@')) }.map { it.item }.distinctBy { it.id }
+        bySound(kronk.allMates()).takeIf { it.isNotEmpty() }?.let { return it }
+        val searched = kronk.mates(name)
+        if (searched.isNotEmpty()) return bySound(searched).ifEmpty { searched }
+        return bySound(kronk.allMates(fresh = true))
+    }
+
+    /** "Share live location" tapped on Kronk's Map, for one Mate (`KronkInbox.share`). */
+    suspend fun Turn.shareFromKronk(share: KronkInbox.Share) = withLocation {
+        if (!kronk.linked) {
+            connect()
+            return@withLocation reply("Connect to Kronk first: sign in in the browser, then tap Share live location on Kronk again")
+        }
+        val ours = android.net.Uri.parse(kronk.server).host
+        if (share.server.isNotEmpty() && share.server != ours) {
+            return@withLocation reply("That was ${share.server}, but Anthemos is connected to $ours")
+        }
+        val mate = try {
+            withContext(Dispatchers.IO) { kronk.account(share.to) }
+        } catch (e: Exception) {
+            return@withLocation reply(e.message ?: "I couldn't reach Kronk")
+        }
+        val until = ZonedDateTime.now().plusMinutes(Whereabouts.DEFAULT_MINUTES)
+        ask(
+            confirm(
+                "Share your exact location with ${mate.name} until ${clock(until)}?",
+                "Yes, share", "Okay, not sharing", yesWords = listOf("share")
+            ) { start(listOf(mate), until) }
         )
     }
 

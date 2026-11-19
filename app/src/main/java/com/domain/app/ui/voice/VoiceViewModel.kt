@@ -13,6 +13,7 @@ import com.domain.app.core.data.DataRepository
 import com.domain.app.focus.ChangeFocus.undo
 import com.domain.app.focus.Choice
 import com.domain.app.focus.KronkFocus.finishConnecting
+import com.domain.app.focus.KronkFocus.shareFromKronk
 import com.domain.app.focus.Turn
 import com.domain.app.focus.Waiting
 import com.domain.app.home.HomeAssistant
@@ -154,6 +155,14 @@ class VoiceViewModel @Inject constructor(
                 code ?: return@collect
                 KronkInbox.code.value = null
                 turn.finishConnecting(code)
+            }
+        }
+        // "Share live location" tapped on Kronk's Map.
+        viewModelScope.launch {
+            KronkInbox.share.collect { share ->
+                share ?: return@collect
+                KronkInbox.share.value = null
+                turn.shareFromKronk(share)
             }
         }
     }

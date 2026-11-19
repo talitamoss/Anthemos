@@ -111,7 +111,7 @@ private fun KronkConnection(resumed: Int) {
     SettingsItem(
         icon = Icons.Default.Hub,
         title = "Kronk",
-        subtitle = note ?: if (linked) "Connected as ${account ?: "you"} on $host. Live location shares from here."
+        subtitle = note ?: if (linked) "Connected as ${account ?: "you"} on $host. ${mates(kronk.keptMates)}Live location shares from here."
         else "Not connected. Tap to sign in to $host.",
         onClick = {
             if (linked) {
@@ -149,6 +149,12 @@ private fun KronkConnection(resumed: Int) {
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } }
         )
     }
+}
+
+private fun mates(count: Int) = when (count) {
+    0 -> ""
+    1 -> "1 Mate known. "
+    else -> "$count Mates known. "
 }
 
 /** Proton Calendar, read through its "Share with anyone" link. */

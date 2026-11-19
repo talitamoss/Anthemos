@@ -175,6 +175,8 @@ Anthemos links to Kronk once, and from then on what it shares is signed by the p
 
 - **Connect:** "connect to Kronk" opens Kronk's sign-in in the browser (OAuth; Anthemos registers itself as an app). Coming back (`anthemos://kronk`), it makes a P-256 key in the Android Keystore, which never leaves the phone, and gives Kronk the public half, signed to prove it holds the key. The token is kept in encrypted preferences (`kronk/Kronk.kt`). The server is shadow.kronk.info until live location is released to kronk.info.
 - **Live location:** "share my location with Ana for an hour", "let Dad see where I am until five", "share my live location with Ana and Sam", "share live tracking with Jye on Kronk". It finds them among your Kronk Mates, asks "Share your exact location with Ana Lee until 4:00 pm?", and only on yes starts. An hour unless said, a day at most. The location service then sends a signed reading about every 30 seconds; the notification says who sees it and has Stop sharing. "Stop sharing" or "stop sharing with Ana" ends it, as does Stop in Kronk's Account & Security.
+- **Names by sound:** the speech model only knows ordinary words, so an unusual name comes back as whatever it sounds nearest: Pargo as "pago" or "par go", Kronk as "cronk" or "crank". Anthemos keeps your Kronk Mates on the phone (fetched on connecting, again after a day, or when a name isn't found) and matches what was heard by sound (`kronk/SoundsLike.kt`): the consonants as said, "c" and "k" one sound, an "r" after a vowel dropped. A name said exactly wins; two that sound alike are asked about. "Kronk" is also heard as cronk, crank, krunk and conk. Settings, Connections shows how many Mates are known.
+- **Started on Kronk:** the Map's Place me panel has Share live location. Pick a Mate there and Kronk opens Anthemos (`anthemos://kronk/share?to=<account id>&server=<host>`), which looks the account up on Kronk, asks the same question for an hour, and only on yes starts. Without Anthemos, Kronk says it's needed and links to anthemos.org. A link from elsewhere can't share on its own: it is always asked, with the name Kronk gives.
 - **On Kronk** the Mates named get a nudge and see you live on the Map, exact, with "From Anthemos, signed by their phone". Kronk keeps only the latest point, until the share ends. For now Kronk's server can read it as it passes; next, it is encrypted to viewers who use Anthemos.
 - **Later:** the same link carries other shares (treks, sleep, mood) as signed, revocable permissions.
 
@@ -280,6 +282,8 @@ the browser; tap again to disconnect, which unlinks the phone on Kronk and
 stops live sharing), Home Assistant, Proton Calendar (paste the share
 link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
+
+**2.22:** names are matched by sound against your Mates kept on the phone, "Kronk" is heard as cronk or crank too, and Share live location on Kronk's Map opens Anthemos to ask.
 
 **alpha 13:** sharing also takes "tracking", "position" or "where I am" for location, and "on Kronk" at the end.
 
