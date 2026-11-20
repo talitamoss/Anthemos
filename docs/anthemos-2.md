@@ -31,6 +31,7 @@ Not on a big model on the phone, and not on a server we run for everyone: on **e
 
 The **Hey Poly** switch in Settings (`ui/settings/sections/HeyPolySetting.kt`) turns on listening for one phrase, all the time, until it's switched off (`voice/WakeService.kt`). On hearing it, a short tone, and Speak opens listening, over the lock screen if need be. "Anthemos" isn't a word the speech model knows, so the phrase is Hey Poly (also heard as Polly, Pauly, Paulie).
 
+- **Only the phrase on its own opens Speak** (`WakePhrase`): a finished stretch of speech, never the recogniser's half-way guess, that is just "Hey Poly" with both words heard surely. Ordinary words close to it (hey, holy, police, play and the like) are in the recogniser's list too, so speech lands on them instead of being bent into the phrase.
 - **Nothing is kept or sent.** Audio is only checked for the phrase, on the phone, by the same Vosk model Speak uses (loaded once for both, `voice/SpeechModel.kt`).
 - **Light on battery:** each fifth of a second is measured first, and only sound louder than the room's own noise goes to the recogniser (`SoundGate`), which knows only the phrase. It lets go of the microphone during calls, on battery saver, below 15% (unless charging), and while Speak is listening.
 - **Android's limits:** a foreground service with a notification, and GrapheneOS's microphone dot, while it runs. It can only take the microphone while Anthemos is on screen, so after a restart a notification asks for one tap. Opening Speak from the background needs "Display over other apps", asked for when it's switched on; without it, hearing the phrase shows a "Tap to talk" notification.
@@ -282,6 +283,8 @@ the browser; tap again to disconnect, which unlinks the phone on Kronk and
 stops live sharing), Home Assistant, Proton Calendar (paste the share
 link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
+
+**2.23:** Hey Poly only opens Speak for the phrase said on its own and clearly, not for a guess partway through a sentence. Coming back to Speak from Settings no longer starts listening again after Speak was opened by Hey Poly, a reminder or a headset.
 
 **2.22:** names are matched by sound against your Mates kept on the phone, "Kronk" is heard as cronk or crank too, and Share live location on Kronk's Map opens Anthemos to ask.
 

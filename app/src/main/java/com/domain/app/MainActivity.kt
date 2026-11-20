@@ -62,10 +62,13 @@ class MainActivity : ComponentActivity() {
         }
         // Opened from a prompt: Speak asks it and listens for the answer.
         PromptInbox.receive(intent)
-        listenRequest += 1
+        // Counted for the whole app, not this screen: Speak remembers the last one it
+        // answered, and that must stay below a new request after the screen is rebuilt.
+        listenRequest = ++requests
     }
 
     companion object {
+        private var requests = 0
         private val LISTEN_ACTIONS = setOf(
             Intent.ACTION_VOICE_COMMAND,
             Intent.ACTION_ASSIST,

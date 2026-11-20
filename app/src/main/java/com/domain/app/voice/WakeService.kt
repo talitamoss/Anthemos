@@ -76,7 +76,7 @@ class WakeService : Service() {
 
     private fun loop() {
         val model = runCatching { SpeechModel.get(this) }.getOrNull() ?: return stopSelf()
-        val recognizer = Recognizer(model, RATE.toFloat(), GRAMMAR)
+        val recognizer = Recognizer(model, RATE.toFloat(), WakePhrase.GRAMMAR).apply { setWords(true) }
         val gate = SoundGate()
         try {
             while (running) {
@@ -128,9 +128,9 @@ class WakeService : Service() {
                     }
                     SoundGate.Sound -> if (feed(recognizer, chunk, n)) return true
                     SoundGate.End -> {
-                        val said = text(recognizer.finalResult)
+                        val heard = WakePhrase.heard(words(recognizer.finalResult))
                         recognizer.reset()
-                        if (said.isPhrase()) return true
+                        if (heard) return true
                     }
                 }
             }
@@ -141,16 +141,23 @@ class WakeService : Service() {
         return false
     }
 
+    /**
+     * Only a finished stretch of speech counts, never a partial guess: the
+     * recogniser's partials often read "hey poly" mid-sentence and then
+     * change their mind, which is how it used to open by itself.
+     */
     private fun feed(recognizer: Recognizer, chunk: ShortArray, n: Int): Boolean {
-        val said = if (recognizer.acceptWaveForm(chunk, n)) text(recognizer.result) else text(recognizer.partialResult, "partial")
-        if (!said.isPhrase()) return false
+        if (!recognizer.acceptWaveForm(chunk, n)) return false
+        if (!WakePhrase.heard(words(recognizer.result))) return false
         recognizer.reset()
         return true
     }
 
-    private fun String.isPhrase() = PHRASES.any { contains(it) }
-
-    private fun text(json: String, key: String = "text") = runCatching { JSONObject(json).optString(key) }.getOrDefault("")
+    /** The words of a result, each with how sure the recogniser was. */
+    private fun words(json: String): List<Pair<String, Double>> = runCatching {
+        val list = JSONObject(json).optJSONArray("result") ?: return emptyList()
+        (0 until list.length()).map { i -> list.getJSONObject(i).let { it.optString("word") to it.optDouble("conf", 0.0) } }
+    }.getOrDefault(emptyList())
 
     /** A short tone, then Speak opens listening (over the lock screen if need be). */
     private fun heard() {
@@ -216,8 +223,6 @@ class WakeService : Service() {
         private const val CHANNEL = "hey_poly"
         private const val NOTIFICATION_ID = 7302
         private const val HEARD_ID = 7303
-        private val PHRASES = listOf("hey poly", "hey polly", "hey pauly", "hey paulie")
-        private val GRAMMAR = (PHRASES + "[unk]").joinToString(",", "[", "]") { "\"$it\"" }
 
         /** Speak is listening itself: Hey Poly lets go of the microphone. */
         @Volatile var appListening = false
@@ -305,5 +310,36 @@ class WakeOnBoot : BroadcastReceiver() {
                 .setContentText("Android needs a tap after a restart")
                 .setContentIntent(open).setAutoCancel(true).build()
         )
+    }
+}
+
+/**
+ * When Hey Poly counts as said (docs/anthemos-2.md, "Hey Poly"). The
+ * recogniser only knows a few words, so it fits whatever it hears to the
+ * nearest of them. To keep that from opening Speak:
+ * - the words around the phrase are in its list too ([DECOYS]), so ordinary
+ *   speech lands on them rather than on the phrase;
+ * - the phrase must be all that was said, not part of a sentence;
+ * - and the recogniser must be sure of both words ([MIN_CONF]).
+ */
+object WakePhrase {
+    val PHRASES = listOf("hey poly", "hey polly", "hey pauly", "hey paulie")
+
+    /** Sounds near the phrase, and common short things said, for speech to land on. */
+    private val DECOYS = listOf(
+        "hey", "hi", "hello", "okay", "oh", "yeah", "no", "the", "a", "and", "i", "it", "is", "so",
+        "pay", "play", "hay", "holy", "holly", "police", "policy", "pole", "pulley", "party",
+        "polo", "paul", "pearly", "hey paul", "hey babe", "hey buddy", "hey baby", "hey you"
+    )
+
+    val GRAMMAR = (PHRASES + DECOYS + "[unk]").joinToString(",", "[", "]") { "\"$it\"" }
+
+    /** How sure of each word the recogniser must be, from 0 to 1. */
+    const val MIN_CONF = 0.8
+
+    fun heard(words: List<Pair<String, Double>>): Boolean {
+        if (words.size != 2) return false
+        val said = words.joinToString(" ") { it.first }
+        return said in PHRASES && words.all { it.second >= MIN_CONF }
     }
 }

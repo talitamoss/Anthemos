@@ -86,6 +86,8 @@ class VoiceViewModel @Inject constructor(
     private var promptAt: Instant = Instant.EPOCH
     /** What to do once location permission is answered. */
     private var afterLocation: (suspend Turn.() -> Unit)? = null
+    /** The last request to listen (from Hey Poly, a reminder, a headset) Speak has answered. */
+    var listenAnswered = 0
 
     private val _state = MutableStateFlow(VoiceUiState())
     val state: StateFlow<VoiceUiState> = _state.asStateFlow()

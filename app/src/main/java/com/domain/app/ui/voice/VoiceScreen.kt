@@ -113,8 +113,13 @@ fun VoiceScreen(
         if (micGranted()) viewModel.listen() else permissions.launch(PERMISSIONS)
     }
 
+    // Each request once: coming back to Speak (from Settings, say) must not
+    // start listening again for a request it already answered.
     LaunchedEffect(listenRequest) {
-        if (listenRequest > 0) talk()
+        if (listenRequest > viewModel.listenAnswered) {
+            viewModel.listenAnswered = listenRequest
+            talk()
+        }
     }
 
     // A place, the trail or live sharing needs location: ask, then carry on.
