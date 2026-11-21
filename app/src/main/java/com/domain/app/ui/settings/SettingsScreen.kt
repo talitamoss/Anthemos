@@ -15,6 +15,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.domain.app.BuildConfig
+import com.domain.app.ui.settings.sections.HeyPolySetting
+import com.domain.app.ui.settings.sections.ConnectionsSettings
+import com.domain.app.update.UpdateCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,6 +71,22 @@ fun SettingsScreen(
         // WORKING FEATURES SECTION
         // ============================================
         
+        // Hey Poly and updates, moved here from Speak.
+        item {
+            SettingsSection(title = "Anthemos") {
+                HeyPolySetting()
+                Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                UpdateCard(Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+        }
+
+        // Everything Anthemos connects to.
+        item {
+            SettingsSection(title = "Connections") {
+                ConnectionsSettings()
+            }
+        }
+
         // Plugins Section (WORKING)
         item {
             SettingsSection(title = "Plugins") {
