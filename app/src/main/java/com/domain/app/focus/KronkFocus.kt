@@ -7,6 +7,7 @@ import com.domain.app.focus.PlacesFocus.withLocation
 import com.domain.app.kronk.Kronk
 import com.domain.app.kronk.KronkInbox
 import com.domain.app.kronk.SoundsLike
+import com.domain.app.place.Here
 import com.domain.app.place.LiveShare
 import com.domain.app.place.LocationService
 import com.domain.app.place.Whereabouts
@@ -30,7 +31,11 @@ object KronkFocus {
                 "kronk.share", "Shares live location with Mates, after asking",
                 listOf("share my location with Ana for an hour", "share live tracking with Jye on Kronk")
             ) { share(it) },
-            where<Whereabouts.StopSharing>("kronk.stop", "Stops sharing live location", listOf("stop sharing", "stop sharing with Ana")) { stop(it.name) }
+            where<Whereabouts.StopSharing>("kronk.stop", "Stops sharing live location", listOf("stop sharing", "stop sharing with Ana")) { stop(it.name) },
+            where<Whereabouts.UpdateKronk>(
+                "kronk.update", "Moves your Kronk pin to where you are, after asking",
+                listOf("update my location on Kronk", "put me on the map")
+            ) { update() }
         )
     )
 
@@ -120,6 +125,36 @@ object KronkFocus {
                 "Share your exact location with ${mate.name} until ${clock(until)}?",
                 "Yes, share", "Okay, not sharing", yesWords = listOf("share")
             ) { start(listOf(mate), until) }
+        )
+    }
+
+    /** "Update" tapped on Kronk's Map (`KronkInbox.update`), holding Kronk's host. */
+    suspend fun Turn.updateFromKronk(server: String) {
+        if (!kronk.linked) {
+            connect()
+            return reply("Connect to Kronk first: sign in in the browser, then tap Update on Kronk again")
+        }
+        val ours = android.net.Uri.parse(kronk.server).host
+        if (server.isNotEmpty() && server != ours) return reply("That was $server, but Anthemos is connected to $ours")
+        update()
+    }
+
+    /** Asks, then moves the pin. Mates see the town, never the exact spot. */
+    private suspend fun Turn.update() = withLocation {
+        if (!kronk.linked) return@withLocation reply("Connect to Kronk first. Say connect to Kronk.")
+        ask(
+            confirm(
+                "Move your pin on Kronk to where you are now? Mates see the town, not the spot.",
+                "Yes, move it", "Okay, leaving it", yesWords = listOf("move")
+            ) {
+                val here = Here.now(context) ?: return@confirm reply("I can't tell where you are right now")
+                val town = try {
+                    withContext(Dispatchers.IO) { kronk.updatePin(here.lat, here.lng) }
+                } catch (e: Exception) {
+                    return@confirm reply(e.message ?: "I couldn't reach Kronk")
+                }
+                reply(if (town != null) "Your pin on Kronk is in $town" else "Your pin on Kronk is moved")
+            }
         )
     }
 

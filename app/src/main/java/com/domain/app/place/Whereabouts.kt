@@ -21,6 +21,8 @@ sealed class Whereabouts {
     data class StopSharing(val name: String?) : Whereabouts()
     /** "Connect to Kronk". */
     object LinkKronk : Whereabouts()
+    /** "Update my location on Kronk": moves the Kronk pin to here. */
+    object UpdateKronk : Whereabouts()
 
     companion object {
         /** Live sharing runs an hour unless said otherwise, and a day at most (Kronk's limit). */
@@ -30,6 +32,7 @@ sealed class Whereabouts {
         fun parse(command: String, now: ZonedDateTime): Whereabouts? {
             val text = command.trim()
             if (LINK.matches(text)) return LinkKronk
+            if (UPDATE.matches(text)) return UpdateKronk
             if (WHERE_AM_I.matches(text)) return WhereAmI
             WHERE_WAS.matchEntire(text)?.let { m -> return whereWas(m.groupValues[1].trim(), now) }
             if (TRAIL_ON.matches(text)) return Trail(true)
@@ -92,6 +95,10 @@ sealed class Whereabouts {
         private val WHERE_WAS = Regex("^where (?:was i|have i been|did i go)(.*)$")
         private val TRAIL_ON = Regex("^(?:start|turn on|switch on|keep) (?:tracking|my trail|the trail|location|my location|tracking me|tracking my location)$|^track (?:me|my location|where i go)$")
         private val TRAIL_OFF = Regex("^(?:stop|turn off|switch off|pause) (?:tracking|my trail|the trail|location|tracking me|tracking my location)$|^don't track (?:me|my location)$")
+        private val UPDATE = Regex(
+            "^(?:update|move|set)(?: my)? (?:location|pin|place)(?: (?:on|to|in) $KRONK| on (?:the )?(?:$KRONK )?map)$" +
+                "|^(?:update|move) my $KRONK (?:location|pin)$|^put me on (?:the )?(?:$KRONK )?map$"
+        )
         private val STOP = Regex("^stop sharing(?: my)?(?: live)?(?: location| tracking| position)?(?: with (.+?))?(?: (?:on|through|via) $KRONK)?$")
         /** "...on Kronk": where it goes, not part of a name. */
         private val ON_KRONK = Regex("\\s+(?:on|through|via|using) $KRONK\\b")

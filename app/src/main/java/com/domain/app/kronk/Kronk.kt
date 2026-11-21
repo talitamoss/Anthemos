@@ -208,6 +208,23 @@ class Kronk(private val context: Context) {
     val account: String? get() = prefs.getString(ACCOUNT, null)
 
     /** Unlinks this phone on Kronk (its shares stop there too), then forgets the sign-in. */
+    /**
+     * Moves your Kronk pin to [lat],[lng], kept to the city like every pin,
+     * keeping who sees it and its note. Kronk names it for its town. Returns
+     * that name, or null.
+     */
+    fun updatePin(lat: Double, lng: Double): String? {
+        val now = runCatching { get("/api/v1/map/presence/self") }.getOrNull()
+            ?.takeIf { it.trim().startsWith("{") }?.let(::JSONObject)
+        val body = FormBody.Builder()
+            .add("lat", "%.6f".format(Locale.ROOT, lat))
+            .add("lng", "%.6f".format(Locale.ROOT, lng))
+            .add("precision", "city")
+            .add("share_scope", now?.optString("share_scope")?.takeIf { it.isNotEmpty() } ?: "friends")
+        now?.optString("note")?.takeIf { it.isNotEmpty() && it != "null" }?.let { body.add("note", it) }
+        return JSONObject(post("/api/v1/map/presence", body.build())).optString("label").takeIf { it.isNotEmpty() && it != "null" }
+    }
+
     fun disconnect() {
         val link = prefs.getString(LINK_ID, null)
         if (link != null) {
@@ -317,9 +334,16 @@ object KronkInbox {
 
     val share = kotlinx.coroutines.flow.MutableStateFlow<Share?>(null)
 
+    /** "Update" tapped on Kronk's Map: anthemos://kronk/update?server=<host>, holding the host. */
+    val update = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
     fun receive(intent: android.content.Intent?) {
         val data = intent?.data ?: return
         if (data.scheme != "anthemos" || data.host != "kronk") return
+        if (data.path == "/update") {
+            update.value = data.getQueryParameter("server").orEmpty()
+            return
+        }
         if (data.path == "/share") {
             val to = data.getQueryParameter("to")?.takeIf { it.all(Char::isDigit) && it.isNotEmpty() } ?: return
             share.value = Share(to, data.getQueryParameter("server").orEmpty())
