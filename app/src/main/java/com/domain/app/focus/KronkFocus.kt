@@ -40,7 +40,7 @@ object KronkFocus {
     )
 
     suspend fun Turn.connect() {
-        if (kronk.linked) return reply("Already connected to Kronk")
+        if (kronk.linked) return reply("Already connected to Kronk as @${kronk.account}")
         val page = try {
             withContext(Dispatchers.IO) { kronk.signInPage() }
         } catch (e: Exception) {
@@ -58,7 +58,7 @@ object KronkFocus {
                 kronk.finishSignIn(code)
                 runCatching { kronk.allMates(fresh = true) }
             }
-            reply("Connected to Kronk. Say share my location with, and a Mate's name.")
+            reply("Connected to Kronk as @${kronk.account}. Say share my location with, and a Mate's name.")
         } catch (e: Exception) {
             reply(e.message ?: "I couldn't finish connecting to Kronk")
         }
@@ -158,15 +158,19 @@ object KronkFocus {
         )
     }
 
-    private suspend fun Turn.start(mates: List<Kronk.Mate>, until: ZonedDateTime) {
+    /** Starts sharing and says so; returns why it couldn't, or null. */
+    internal suspend fun Turn.start(mates: List<Kronk.Mate>, until: ZonedDateTime): String? {
         val id = try {
             withContext(Dispatchers.IO) { kronk.startSharing(mates, until.toInstant()) }
         } catch (e: Exception) {
-            return reply(e.message ?: "I couldn't reach Kronk")
+            val why = e.message ?: "I couldn't reach Kronk"
+            reply(why)
+            return why
         }
         location.shares = location.shares + LiveShare(id, mates.map { it.name }, until.toInstant())
         LocationService.refresh(context)
         reply("Sharing with ${names(mates)} until ${clock(until)}. Say stop sharing to end it.")
+        return null
     }
 
     private suspend fun Turn.stop(name: String?) {

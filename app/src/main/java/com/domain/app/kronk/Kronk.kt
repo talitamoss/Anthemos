@@ -225,6 +225,29 @@ class Kronk(private val context: Context) {
         return JSONObject(post("/api/v1/map/presence", body.build())).optString("label").takeIf { it.isNotEmpty() && it != "null" }
     }
 
+    /** Something Kronk's website asked, read with this phone's sign-in. */
+    data class Ask(val id: String, val kind: String, val status: String, val account: String, val to: Mate?)
+
+    /** The ask [id], only if it was made in the account Anthemos is connected to. */
+    fun ask(id: String): Ask {
+        val json = JSONObject(get("/api/v1/anthemos/asks/" + Uri.encode(id)))
+        val to = json.optJSONObject("to")?.let { Mate(it.getString("id"), it.optString("name").ifBlank { it.getString("acct") }, it.getString("acct")) }
+        return Ask(json.getString("id"), json.getString("kind"), json.getString("status"), json.getJSONObject("account").getString("acct"), to)
+    }
+
+    /** Answers an ask: done, declined or failed, with a short result, signed. */
+    fun answer(id: String, outcome: String, result: String) {
+        val linkId = prefs.getString(LINK_ID, null) ?: throw KronkError("Connect to Kronk first")
+        postJson(
+            "/api/v1/anthemos/asks/" + Uri.encode(id) + "/answer",
+            JSONObject()
+                .put("link_id", linkId)
+                .put("outcome", outcome)
+                .put("result", result)
+                .put("signature", sign("anthemos-answer-v1", id, linkId, outcome, result))
+        )
+    }
+
     fun disconnect() {
         val link = prefs.getString(LINK_ID, null)
         if (link != null) {
@@ -337,9 +360,19 @@ object KronkInbox {
     /** "Update" tapped on Kronk's Map: anthemos://kronk/update?server=<host>, holding the host. */
     val update = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
+    /** Kronk's website asked something: anthemos://kronk/ask?id=<token>&server=<host>&for=<acct>. */
+    data class Ask(val id: String, val server: String, val forAcct: String)
+
+    val ask = kotlinx.coroutines.flow.MutableStateFlow<Ask?>(null)
+
     fun receive(intent: android.content.Intent?) {
         val data = intent?.data ?: return
         if (data.scheme != "anthemos" || data.host != "kronk") return
+        if (data.path == "/ask") {
+            val id = data.getQueryParameter("id")?.takeIf { it.isNotEmpty() && it.all { c -> c.isLetterOrDigit() || c == '-' || c == '_' } } ?: return
+            ask.value = Ask(id, data.getQueryParameter("server").orEmpty(), data.getQueryParameter("for").orEmpty())
+            return
+        }
         if (data.path == "/update") {
             update.value = data.getQueryParameter("server").orEmpty()
             return

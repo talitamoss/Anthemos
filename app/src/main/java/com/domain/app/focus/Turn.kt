@@ -52,6 +52,9 @@ interface Turn {
     /** Asks something, then listens for the answer, which goes to [Waiting.answer]. */
     fun ask(waiting: Waiting)
 
+    /** Asks on screen only, answered by a tap: nothing is said and nothing listened for. */
+    fun tap(waiting: Waiting)
+
     /** Asks a prompt or follow-up, then listens for its answer. */
     fun askPrompt(question: String, prompt: Prompt)
 

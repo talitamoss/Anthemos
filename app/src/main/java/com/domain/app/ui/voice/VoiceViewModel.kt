@@ -12,6 +12,7 @@ import com.domain.app.calendar.Reminders
 import com.domain.app.core.data.DataRepository
 import com.domain.app.focus.ChangeFocus.undo
 import com.domain.app.focus.Choice
+import com.domain.app.focus.KronkAsks.fromKronk
 import com.domain.app.focus.KronkFocus.finishConnecting
 import com.domain.app.focus.KronkFocus.shareFromKronk
 import com.domain.app.focus.KronkFocus.updateFromKronk
@@ -123,6 +124,11 @@ class VoiceViewModel @Inject constructor(
             speakThen(waiting.question) { if (_state.value.waiting === waiting) listen() }
         }
 
+        override fun tap(waiting: Waiting) {
+            listener.cancel()
+            _state.update { it.copy(reply = waiting.question, waiting = waiting, phase = VoicePhase.IDLE) }
+        }
+
         override fun askPrompt(question: String, prompt: Prompt) {
             promptAt = Instant.now()
             _state.update { it.copy(phase = VoicePhase.IDLE, reply = question, prompt = prompt) }
@@ -160,7 +166,7 @@ class VoiceViewModel @Inject constructor(
                 turn.finishConnecting(code)
             }
         }
-        // "Share live location" tapped on Kronk's Map.
+        // "Share live location" tapped on Kronk's Map, before asks (Kronk 2.1.16).
         viewModelScope.launch {
             KronkInbox.share.collect { share ->
                 share ?: return@collect
@@ -168,7 +174,16 @@ class VoiceViewModel @Inject constructor(
                 turn.shareFromKronk(share)
             }
         }
-        // "Update" tapped on Kronk's Map.
+        // Kronk's website asked: shown with Allow and Not now, nothing spoken.
+        viewModelScope.launch {
+            KronkInbox.ask.collect { ask ->
+                ask ?: return@collect
+                KronkInbox.ask.value = null
+                turn.voice = false
+                turn.fromKronk(ask)
+            }
+        }
+        // "Update" tapped on Kronk's Map, before asks (Kronk 2.1.16).
         viewModelScope.launch {
             KronkInbox.update.collect { server ->
                 server ?: return@collect
