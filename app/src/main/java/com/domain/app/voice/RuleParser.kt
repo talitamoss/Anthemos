@@ -40,7 +40,9 @@ class RuleParser(
      * each is its own entry: a time covers its own part and the untimed
      * parts just before it; parts after the last time happened now.
      */
-    internal fun record(transcript: String): VoiceRequest.Record {
+    internal fun record(said: String): VoiceRequest.Record {
+        // "12,000 steps" is one number, not two parts.
+        val transcript = said.replace(Regex("(\\d),(\\d{3})\\b"), "$1$2")
         val now = today()
         val seps = SPLIT.findAll(transcript).toList()
         val starts = listOf(0) + seps.map { it.range.last + 1 }

@@ -9,9 +9,14 @@ import kotlin.math.sqrt
 
 /** The reflections on the page, in this order. */
 object Lenses {
-    val ALL: List<Lens> = listOf(SleepLens, MovementLens, MoodLens, ScreenLens)
+    val ALL: List<Lens> = listOf(
+        SleepLens, MovementLens, StepsLens, MoodLens, EnergyLens,
+        WaterLens, CoffeeLens, AlcoholLens, SmokeFreeLens, CannabisFreeLens, AlcoholFreeLens,
+        MeditationLens, PeopleLens, WorkLens, LearningLens, MakingLens, CareLens,
+        WeightLens, VitalsLens, SymptomsLens, GratitudeLens, WinsLens, ScrollingLens, ScreenLens
+    )
 
-    fun look(record: Record): List<Reflection> = ALL.mapNotNull { it.look(record) }
+    fun look(record: Record): List<Reflection> = ALL.flatMap { it.all(record) }
 }
 
 /**
@@ -30,7 +35,8 @@ object SleepLens : Lens {
 
     fun night(record: Record, morning: LocalDate): Night? {
         val day = record.on(morning)
-        day.flatMap { it.items }.firstOrNull { it.kind == "sleep" && (it.minutes ?: 0) > 0 }?.let {
+        // A nap isn't the night.
+        day.flatMap { it.items }.firstOrNull { it.kind == "sleep" && it.label != "nap" && (it.minutes ?: 0) > 0 }?.let {
             return Night(it.minutes!!, null)
         }
         val evening = morning.minusDays(1).atTime(18, 0).atZone(record.zone).toInstant()
@@ -83,7 +89,11 @@ object MovementLens : Lens {
 
     private val MOVES = Regex("\\b(?:walk|walked|walking|run|ran|running|jog|jogging|swim|swam|swimming|yoga|cycle|cycling|ride|rode|hike|hiked|hiking|gym|workout|stretch|stretching|pilates|dance|danced|dancing)\\b")
 
-    fun moves(item: Item) = item.kind == "activity" || item.kind == "outside" || item.group == "sport" || MOVES.containsMatchIn(item.label)
+    /** Sitting still is its own reflection (Meditation). */
+    private val STILL = setOf("meditation", "breathwork")
+
+    fun moves(item: Item) = item.label !in STILL &&
+        (item.kind == "activity" || item.kind == "outside" || item.group == "sport" || MOVES.containsMatchIn(item.label))
 
     override fun look(record: Record): Reflection? {
         val found = record.thisWeek(::moves)
@@ -104,27 +114,30 @@ object MovementLens : Lens {
     }
 }
 
-/** Mood this week: the average of the scores given, and the word said most. */
-object MoodLens : Lens {
-    override val id = "mood"
+/** A score out of ten this week (mood, energy): the average, and the word said most. */
+open class ScoreLens(override val id: String, private val kind: String, private val title: String) : Lens {
 
-    private fun scoreOf(item: Item) = item.details["score"]?.toDoubleOrNull()?.takeIf { it in 0.0..10.0 }
+    /** "8/10" as kept, or a bare "8". */
+    private fun scoreOf(item: Item) = item.details["score"]?.substringBefore('/')?.trim()?.toDoubleOrNull()?.takeIf { it in 0.0..10.0 }
 
     override fun look(record: Record): Reflection? {
-        val found = record.thisWeek { it.kind == "mood" }
+        val found = record.thisWeek { it.kind == kind }
         if (found.isEmpty()) return null
         val scores = found.mapNotNull { scoreOf(it.second) }
-        val word = found.map { it.second.label }.filter { it != "mood" }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+        val word = found.map { it.second.label }.filter { it != kind }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
         val byDay = record.week.map { d ->
             found.filter { record.dateOf(it.first) == d }.mapNotNull { scoreOf(it.second) }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
         }
         return if (scores.isNotEmpty()) {
-            Reflection(id, "Mood", "%.1f / 10".format(java.util.Locale.ROOT, scores.average()).replace(".0 ", " "), listOfNotNull("this week", word?.let { "mostly $it" }).joinToString(" · "), byDay)
+            Reflection(id, title, "%.1f / 10".format(java.util.Locale.ROOT, scores.average()).replace(".0 ", " "), listOfNotNull("this week", word?.let { "mostly $it" }).joinToString(" · "), byDay)
         } else {
-            Reflection(id, "Mood", word ?: "${found.size} noted", "this week", byDay)
+            Reflection(id, title, word ?: "${found.size} noted", "this week", byDay)
         }
     }
 }
+
+object MoodLens : ScoreLens("mood", "mood", "Mood")
+object EnergyLens : ScoreLens("energy", "energy", "Energy")
 
 /** Screen time, from the phone, when usage access is on. */
 object ScreenLens : Lens {

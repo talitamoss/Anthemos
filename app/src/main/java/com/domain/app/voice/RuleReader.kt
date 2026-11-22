@@ -154,6 +154,8 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
 
     private fun clean(words: String): String =
         words.lowercase()
+            // "12,000 steps" is one number, not two clauses.
+            .replace(Regex("(\\d),(\\d{3})\\b"), "$1$2")
             .replace(Regex("(?<!\\d)\\.|\\.(?!\\d)|[!?]"), " ")
             .replace(Regex("\\b(um+|uh+|er+|like|you know)\\b"), " ")
             .replace(Regex("\\s+"), " ")
@@ -275,6 +277,7 @@ class RuleReader(private val now: () -> LocalTime = { LocalTime.now() }) {
             "dance|danced|dancing" to "dance",
             "surf|surfed|surfing" to "surf",
             "meditate|meditated|meditation|meditating" to "meditation",
+            "breathwork|breath work|breathing exercises" to "breathwork",
             "nap|napped" to "nap",
             "slept|sleep" to "sleep"
         )

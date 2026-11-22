@@ -17,6 +17,9 @@ import java.time.ZoneId
 interface Lens {
     val id: String
     fun look(record: Record): Reflection?
+
+    /** For a lens that gives several (one per habit, one per measure). */
+    fun all(record: Record): List<Reflection> = listOfNotNull(look(record))
 }
 
 /**

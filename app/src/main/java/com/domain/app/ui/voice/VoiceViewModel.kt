@@ -168,8 +168,8 @@ class VoiceViewModel @Inject constructor(
     val reflections: StateFlow<List<Reflection>> = combine(dataRepository.getPluginData(Entry.PLUGIN_ID), looked) { points, _ ->
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now(zone)
-        val since = today.minusDays(8).atStartOfDay(zone).toInstant()
-        val entries = points.mapNotNull(Entry::from).filter { !it.time.isBefore(since) }
+        // All of it: "smoke-free" and weight look back further than a week.
+        val entries = points.mapNotNull(Entry::from)
         val sense = turn.sense
         val week = (6 downTo 0).map { today.minusDays(it.toLong()) }
         val nights = if (sense.allowed()) {

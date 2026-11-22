@@ -119,7 +119,154 @@ object Day {
     private const val MOODS = "good|great|happy|sad|flat|low|down|anxious|stressed|angry|calm|content|lonely|excited|grumpy|irritable|overwhelmed|okay|ok|fine|meh|off|peaceful|frustrated|upset|hopeful|grateful|blue|depressed|joyful|chill|relaxed"
     private const val ENERGY = "tired|exhausted|knackered|wrecked|drained|wired|energetic|energised|energized|sleepy|fatigued|no energy|low energy|lots of energy|full of energy|buzzing"
 
-    private val KINDS: List<Kind> = listOf(
+    // ---- More of a life (docs/anthemos-2.md, "Kinds"): read before the kinds below, most particular first.
+
+    /** "58", "seventy two", "one twenty", "a hundred", "36.8", "thirty six point eight", "8k", "ten thousand". */
+    internal fun amount(said: String): Double? {
+        val s = said.trim().replace(",", "")
+        s.toDoubleOrNull()?.let { return it }
+        Regex("^(.+?) ?(?:k|thousand)$").find(s)?.let { m -> return amount(m.groupValues[1])?.times(1000) }
+        Regex("^(.+?) point (\\w+)$").find(s)?.let { m ->
+            val whole = amount(m.groupValues[1]) ?: return null
+            val tenth = Numbers.parse(m.groupValues[2]) ?: return null
+            return whole + tenth / 10.0
+        }
+        Regex("^(?:one|a) hundred(?: and)?(?: (.+))?$").find(s)?.let { m ->
+            return 100.0 + (m.groupValues[1].takeIf { it.isNotEmpty() }?.let { Numbers.parse(it) } ?: 0)
+        }
+        Regex("^one ((?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?: \\w+)?)$").find(s)?.let { m ->
+            return Numbers.parse(m.groupValues[1])?.let { 100.0 + it }
+        }
+        return Numbers.parse(s)?.toDouble()
+    }
+
+    private fun show(n: Double) = if (n % 1.0 == 0.0) n.toInt().toString() else n.toString()
+
+    private val NUM = "\\d+(?:\\.\\d+)?|(?:one|a) hundred(?: and)?(?: [a-z]+)?|one (?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?: [a-z]+)?|(?:${Numbers.PATTERN})(?: point [a-z]+)?"
+    private const val NOT = "\\b(?:no|not|didn't|didnt|did not|haven't|havent|without|zero|free)\\b"
+    private const val QUIT = "\\b(?:quit|stopped|gave up|giving up|quitting)\\b"
+    private const val BODY_PARTS = "ankle|knee|wrist|back|finger|thumb|hand|foot|toe|shoulder|neck|hamstring|calf|arm|leg|hip|elbow|head|lip|eye|rib|ribs"
+
+    private val NEW_KINDS: List<Kind> = listOf(
+        // Measures: heart rate, blood pressure, temperature, blood sugar, oxygen, waist.
+        Kind("vital", Regex("\\b(?:resting heart rate|heart rate|pulse|bpm|blood pressure|bp|temperature|temp|blood sugar|glucose|bgl|oxygen|spo2|sats|waist)\\b"), { c, _ ->
+            fun after(words: String) = Regex("\\b(?:$words)\\b(?: (?:was|is|of|at|reading))*:? ?($NUM)").find(c)?.groupValues?.get(1)?.let(::amount)
+            val pressure = Regex("\\b(?:blood pressure|bp)\\b(?: (?:was|is|of|at|reading))*:? ?($NUM) ?(?:over|/) ?($NUM)").find(c)
+            when {
+                pressure != null -> {
+                    val hi = amount(pressure.groupValues[1])
+                    val lo = amount(pressure.groupValues[2])
+                    if (hi == null || lo == null) Item(SKIP, "") else Item("vital", "blood pressure", details = mapOf("value" to "${show(hi)}/${show(lo)}"))
+                }
+                Regex("\\b(?:resting heart rate|heart rate|pulse|bpm)\\b").containsMatchIn(c) ->
+                    (after("resting heart rate|heart rate|pulse") ?: Regex("($NUM) ?bpm").find(c)?.groupValues?.get(1)?.let(::amount))
+                        ?.let { Item("vital", if (c.contains("resting")) "resting heart rate" else "heart rate", details = mapOf("value" to show(it))) } ?: Item(SKIP, "")
+                Regex("\\b(?:temperature|temp)\\b").containsMatchIn(c) ->
+                    after("temperature|temp")?.let { Item("vital", "temperature", details = mapOf("value" to show(it))) } ?: Item(SKIP, "")
+                Regex("\\b(?:blood sugar|glucose|bgl)\\b").containsMatchIn(c) ->
+                    after("blood sugar|glucose|bgl")?.let { Item("vital", "blood sugar", details = mapOf("value" to show(it))) } ?: Item(SKIP, "")
+                Regex("\\b(?:oxygen|spo2|sats)\\b").containsMatchIn(c) ->
+                    after("oxygen|spo2|sats")?.let { Item("vital", "oxygen", details = mapOf("value" to show(it))) } ?: Item(SKIP, "")
+                else -> after("waist")?.let { Item("vital", "waist", details = mapOf("value" to show(it))) } ?: Item(SKIP, "")
+            }
+        }),
+        // "8000 steps", "ten thousand steps", "12k steps".
+        Kind("steps", Regex("\\b($NUM|(?:$NUM) ?(?:k|thousand)) steps\\b"), { _, m ->
+            amount(m.groupValues[1])?.let { Item("steps", "steps", count = it.toInt()) } ?: Item(SKIP, "")
+        }),
+        // Before smoking: "smoked a joint" is cannabis.
+        Kind("cannabis", Regex("\\b(?:weed|joint|joints|cannabis|marijuana|bong|cones?|spliff|edibles?|got high|stoned)\\b"), { c, _ ->
+            when {
+                Regex(QUIT).containsMatchIn(c) -> Item("cannabis", "quit")
+                Regex(NOT).containsMatchIn(c) -> Item("cannabis", "none", count = 0)
+                else -> Item("cannabis", "cannabis")
+            }
+        }),
+        // Smoking and vaping: a count, none today, or quitting.
+        Kind("smoking", Regex("\\b(?:smoked|smoking|smoke|smokes|smoker|cigarettes?|ciggies?|ciggy|cigs?|durries?|darts|vaped|vaping|vape|vapes|nicotine|cigar)\\b(?! salmon| meat| ham| chicken| brisket| trout| paprika| alarm| detector)"), { c, _ ->
+            val vape = Regex("\\b(?:vaped|vaping|vapes?)\\b").containsMatchIn(c)
+            val what = if (vape) "vape" else "cigarette"
+            val count = Regex("\\b(${Numbers.PATTERN}) (?:cigarettes?|ciggies?|cigs?|smokes|durries|darts|vapes)\\b").find(c)?.let { Numbers.parse(it.groupValues[1]) }
+            when {
+                Regex(QUIT).containsMatchIn(c) -> Item("smoking", "quit", details = mapOf("what" to what))
+                Regex(NOT).containsMatchIn(c) -> Item("smoking", "none", count = 0, details = mapOf("what" to what))
+                else -> Item("smoking", what, count = count ?: 1)
+            }
+        }),
+        // A day without alcohol, said: a drink of none.
+        Kind("drink", Regex("\\b(?:no (?:alcohol|drinks|booze|grog|beer|wine)|didn't drink|didnt drink|did not drink|stayed sober|sober|alcohol free|dry day|off the drink|off the booze)\\b"), { _, _ ->
+            Item("drink", "no alcohol", count = 0, group = "alcohol", details = mapOf("none" to "yes"))
+        }),
+        Kind("craving", Regex("\\b(?:craving|cravings|craved|really wanted) (?:a |an |some |for )?(.+?)(?= today| tonight| all day| this|$)"), { _, m ->
+            Item("craving", m.groupValues[1].trim())
+        }),
+        Kind("fasting", Regex("\\b(?:fasted|fasting|intermittent fasting|broke my fast)\\b"), { c, _ ->
+            val hours = Regex("\\b($NUM) hours?\\b").find(c)?.groupValues?.get(1)?.let(::amount)?.toInt()
+            Item("fasting", "fasting", minutes = hours?.times(60))
+        }),
+        Kind("injury", Regex("\\b(?:hurt|injured|sprained|twisted|rolled|cut|burnt|burned|bruised|broke|pulled|strained|jarred|stubbed) (?:my |a )?($BODY_PARTS|muscle)\\b"), { c, m ->
+            Item("injury", m.value.replace(Regex("^(\\w+) (?:my |a )?"), "$1 "), details = details("where" to m.groupValues[1].takeIf { it != "muscle" }, "score" to scoreIn(c)))
+        }, asks = listOf(Ask("score", "How bad, out of ten?"))),
+        Kind("conflict", Regex("\\b(?:argued with|argument with|fought with|fight with|row with|fell out with|had words with) (?:my |the )?(.+?)(?= about| over| today| tonight| this|$)"), { c, m ->
+            val who = m.groupValues[1].trim().takeIf { it !in VAGUE }
+            Item("conflict", "argument", details = details("who" to who, "about" to (about(c) ?: Regex("\\bover (.+)$").find(c)?.groupValues?.get(1))))
+        }, asks = listOf(Ask("about", "What was it about?"))),
+        Kind("worry", Regex("\\b(?:worried|worrying|worry|worried sick) about (.+)$"), { _, m ->
+            Item("worry", m.groupValues[1].trim())
+        }),
+        Kind("win", Regex("\\b(?:proud of (?:myself )?(?:for )?|a win today|small win|big win|nailed|smashed|achieved|accomplished|finally (?:did|finished|got))(.*)$"), { _, m ->
+            Item("win", m.value.trim())
+        }),
+        Kind("idea", Regex("\\b(?:had an idea|an idea for|new idea|idea for|idea about|thought of an idea)(.*)$"), { _, m ->
+            Item("idea", m.groupValues[1].trim().removePrefix(":").trim().replace(Regex("^(?:for|about|to) "), "").ifEmpty { "idea" })
+        }),
+        Kind("goal", Regex("\\b(?:my goal is|my goal for|set a goal|set myself a goal|new goal|i want to start|i want to stop|i want to quit)\\b ?(?:to |is )?(.*)$"), { c, m ->
+            Item("goal", m.groupValues[1].trim().ifEmpty { c })
+        }),
+        Kind("journal", Regex("\\b(?:journaled|journalled|journaling|journalling|wrote in my (?:journal|diary)|morning pages|wrote my journal|did my journal)\\b"), { c, _ ->
+            Item("journal", "journal", minutes = minutes(c))
+        }),
+        Kind("spirit", Regex("\\b(?:prayed|praying|prayer|prayers|went to (?:church|mass|mosque|temple|synagogue|shul|gurdwara)|at (?:church|mass|mosque|temple|synagogue))\\b"), { c, m ->
+            Item("spirit", if (m.value.startsWith("pray")) "prayer" else m.value.substringAfterLast(' '), minutes = minutes(c))
+        }),
+        Kind("volunteer", Regex("\\b(?:volunteered|volunteering|volunteer shift|helped out at)\\b"), { c, _ ->
+            Item("volunteer", "volunteering", minutes = minutes(c), details = details("at" to after("at", c)))
+        }, asks = listOf(Ask("minutes", "How long for?"))),
+        Kind("scrolling", Regex("\\b(?:scrolled|scrolling|doom ?scrolled|doom ?scrolling|on (?:instagram|insta|tiktok|facebook|reddit|twitter|social media)|(?:instagram|insta|tiktok|facebook|reddit|twitter|social media) for)\\b"), { c, _ ->
+            val app = Regex("\\b(instagram|insta|tiktok|facebook|reddit|twitter|social media)\\b").find(c)?.value?.let { if (it == "insta") "instagram" else it }
+            Item("scrolling", app ?: "scrolling", minutes = minutes(c))
+        }, asks = listOf(Ask("minutes", "How long for?"))),
+        // Making things: an instrument, drawing, writing a song. Before study, which takes "practised".
+        Kind("creative", Regex("\\b(?:(?:played|playing|practised|practiced|practising|practicing) (?:the |my |some )?(guitar|piano|keys|drums|violin|bass|ukulele|uke|cello|saxophone|sax|flute|trumpet|harp|synth)|painted|painting|drew|drawing|sketched|sketching|wrote (?:a song|a poem|some music|music|lyrics|some poetry)|made (?:some )?music|knitted|knitting|crochet|crocheted|sewing|sewed|pottery|woodwork)\\b"), { c, m ->
+            Item("creative", m.groupValues[1].ifEmpty { m.value.substringBefore(' ').let { w -> if (w == "wrote" || w == "made") m.value else w } }, minutes = minutes(c))
+        }, asks = listOf(Ask("minutes", "How long for?"))),
+        // Looking after yourself: yes-or-no things a day has or hasn't.
+        Kind("care", Regex("\\b(?:flossed|flossing|brushed my teeth|skincare|skin care|cold shower|cold plunge|ice bath|sauna|massage|haircut|stretched|stretching|foam rolled|took a bath|had a bath|bubble bath|face mask|got my nails done)\\b"), { _, m ->
+            val label = when (m.value) {
+                "flossing" -> "flossed"
+                "skin care" -> "skincare"
+                "stretching" -> "stretched"
+                "took a bath", "had a bath", "bubble bath" -> "bath"
+                "ice bath" -> "cold plunge"
+                else -> m.value
+            }
+            Item("care", label)
+        }, whole = false),
+        Kind("pet", Regex("\\b(?:walked the dog|took the dog (?:for a walk|out)|dog walk|(?:took|took the) (?:dog|cat) to the vet|vet|groomed (?:the )?(?:dog|cat)|played with the (?:dog|cat|puppy|kitten))\\b"), { _, m ->
+            Item("pet", m.value)
+        }, whole = false),
+        Kind("travel", Regex("\\b(?:flew|flight|drove|took the (?:train|bus|tram|ferry)|caught the (?:train|bus|tram|ferry)|road trip|commuted|commute)\\b"), { c, m ->
+            val how = when {
+                m.value.startsWith("fl") -> "flight"
+                m.value == "drove" || m.value == "road trip" -> "drive"
+                m.value == "commuted" || m.value == "commute" -> "commute"
+                else -> m.value.substringAfterLast(' ')
+            }
+            Item("travel", how, minutes = minutes(c), details = details("to" to Regex("\\bto ([a-z][a-z ]+?)(?= for| with| today| this|$)").find(c)?.groupValues?.get(1)))
+        }, whole = false)
+    )
+
+    private val KINDS: List<Kind> = NEW_KINDS + listOf(
         Kind("intimacy", Regex("\\b(?:had sex|made love|sex)\\b"), { _, _ -> Item("intimacy", "sex") }),
         Kind("dream", Regex("\\b(?:dreamt|dreamed|had a dream|a dream about|weird dream|nightmare)\\b"), { c, _ ->
             Item("dream", if (c.contains("nightmare")) "nightmare" else "dream", details = details("about" to about(c)))

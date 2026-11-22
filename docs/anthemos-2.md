@@ -215,6 +215,24 @@ What you've recorded, looked at, on the page above today's entries (`reflect/`).
 - **Movement:** sport, the gym, walks and time outside this week, in minutes when said, otherwise times, and the usual one.
 - **Mood:** the week's average of scores given, and the word said most.
 - **Screen time:** today, against the days before.
+- **Since 2.27, also:** steps; energy; water and coffee a day; alcohol this week and the days without; smoke-free and cannabis-free days (since the last time, or since you said you quit; on a day you had some, how many); alcohol-free days, once you've said a day was; meditation; time with people; work; learning; making; each thing you do for yourself as days out of seven (flossed, sauna); weight and its month; the latest of each measure (heart rate, blood pressure, temperature, blood sugar, oxygen, waist); symptoms; gratitude; wins; scrolling. They are built from a few shapes in `reflect/More.kt` (time this week, a count a day, days since, days out of seven, the latest measure), so most new ones are a line.
+
+## Kinds
+
+A **kind** is the area one thing said belongs to (`Item.kind`): what reflections and questions find things by. The reader (`voice/RuleReader.kt`, `voice/Day.kt`) knows these, each with its label (what it was, in your words) and any amounts and details:
+
+- **Body:** sleep, nap, bed, wake, dream, energy, weight, symptom, injury, period, toilet, intimacy, vital (heart rate, resting heart rate, blood pressure, temperature, blood sugar, oxygen, waist; numbers spoken or typed), steps.
+- **Food and drink:** food, drink (water, coffee, tea, alcohol and more by group; "didn't drink" is a drink of none), cooking, craving, fasting.
+- **Cutting out:** smoking (cigarettes or vapes, how many, none today, quit), cannabis.
+- **Health:** medication.
+- **Moving and stillness:** activity (sport, gym, walk, run, swim, ride, yoga, hike, dance, surf, meditation, breathwork), outside.
+- **Mind:** mood, worry, gratitude, win, idea, goal, journal, spirit (prayer, church and the like).
+- **People:** social, call, conflict.
+- **Work and making:** work, meeting, task, study, creative (an instrument, painting, drawing, writing a song, knitting).
+- **Looking after:** care (flossed, brushed teeth, skincare, cold plunge, sauna, massage, haircut, stretched, bath), chore, pet.
+- **Life:** shopping, spend, place, travel, volunteer, media, scrolling.
+
+A new kind is a `Kind` in `Day.kt` (a pattern, how to read it, and up to two questions after), with a line in `KindsTest`; a reflection for it is a lens. Anything no kind fits is still kept as words.
 
 Sharing a reflection to Kronk comes later, and will be more open than a fixed card (Tal, 2026-11-22).
 
@@ -300,6 +318,8 @@ the browser; tap again to disconnect, which unlinks the phone on Kronk and
 stops live sharing), Home Assistant, Proton Calendar (paste the share
 link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
+
+**2.27:** many more kinds (smoking and vaping, cannabis, alcohol-free days, steps, heart rate, blood pressure and other measures, injuries, cravings, fasting, care habits, journal, prayer, creative work, scrolling, arguments, worries, wins, ideas, goals, pets, travel, volunteering) and reflections for them and for drinks, people, work and learning. Naps no longer count as the night's sleep, and meditation isn't movement.
 
 **2.26:** one page, in anthemos.org's black, white and glaucous, with the mic at the bottom. Reflections above today's entries: sleep score, movement, mood and screen time, from what you've recorded and what the phone saw.
 
