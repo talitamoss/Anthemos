@@ -29,6 +29,8 @@ import com.domain.app.prompts.PromptLog
 import com.domain.app.place.Here
 import com.domain.app.place.LocationService
 import com.domain.app.reflect.Ahead
+import com.domain.app.reflect.Coming
+import com.domain.app.reflect.Sky
 import com.domain.app.reflect.Lenses
 import com.domain.app.reflect.Upcoming
 import com.domain.app.weather.Forecast
@@ -206,37 +208,51 @@ class VoiceViewModel @Inject constructor(
     /** The last forecast and when it came: asked again after half an hour. */
     private var forecast: Pair<Instant, Forecast>? = null
 
-    /** What's coming (`reflect/Ahead.kt`): the weather here, and the next events. */
-    // The events don't wait for the weather, which can take a few seconds to place.
+    /**
+     * What's coming (`reflect/Ahead.kt`): the weather here, and the next
+     * events. When either is missing the tile says why, so it can be fixed.
+     * The events don't wait for the weather, which can take a few seconds.
+     */
     val ahead: StateFlow<Ahead> = combine(
-        combine(dataRepository.getPluginData(Event.PLUGIN_ID), looked) { points, _ ->
-            val now = ZonedDateTime.now()
-            val own = points.mapNotNull(Event::from)
-            val linked = runCatching { turn.calendar.events(now.minusHours(12).toInstant(), now.plusDays(8).toInstant()) }
-                .onFailure { Log.w("Anthemos", "Coming up: the linked calendar didn't read", it) }
-                .getOrDefault(emptyList())
-            Upcoming.events(own + linked, now)
-        },
-        looked.map { weatherNow(ZonedDateTime.now()) }.onStart { emit(null) }
-    ) { events, weather -> Ahead(weather, events) }
+        combine(dataRepository.getPluginData(Event.PLUGIN_ID), looked) { points, _ -> eventsNow(points.mapNotNull(Event::from)) },
+        looked.map { weatherNow(ZonedDateTime.now()) }.onStart { emit(null to "Finding where you are\u2026") }
+    ) { (events, eventsWhy), (sky, skyWhy) -> Ahead(sky, events, skyWhy, eventsWhy) }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Ahead())
+
+    private fun eventsNow(own: List<Event>): Pair<List<Coming>, String?> {
+        val now = ZonedDateTime.now()
+        val calendar = turn.calendar
+        val linked = runCatching { calendar.events(now.minusHours(12).toInstant(), now.plusDays(8).toInstant()) }
+            .onFailure { Log.w("Anthemos", "Coming up: the linked calendar didn't read", it) }
+        val shown = Upcoming.events(own + linked.getOrDefault(emptyList()), now)
+        val why = when {
+            shown.isNotEmpty() -> null
+            linked.isFailure -> "The calendar didn't read: " + (linked.exceptionOrNull()?.message ?: "unknown")
+            !calendar.linked -> "No calendar linked. Add Proton's share link in Settings."
+            calendar.problem != null -> "The calendar didn't load: ${calendar.problem}"
+            else -> "Nothing on in the next week"
+        }
+        return shown to why
+    }
 
     /**
      * Only where location is already allowed, approximate is enough: the
      * page never asks. Sent to Open-Meteo rounded to a tenth of a degree,
-     * about ten kilometres.
+     * about ten kilometres. The weather, or why there's none.
      */
-    private suspend fun weatherNow(now: ZonedDateTime): String? {
-        if (!Here.roughlyAllowed(appContext)) return null
+    private suspend fun weatherNow(now: ZonedDateTime): Pair<Sky?, String?> {
+        if (!Here.roughlyAllowed(appContext)) return null to "Allow location for Anthemos to see the weather"
         val fresh = forecast?.takeIf { Duration.between(it.first, Instant.now()) < Duration.ofMinutes(30) }?.second
         val f = fresh ?: run {
-            val here = Here.near(appContext) ?: return null
+            val here = Here.near(appContext) ?: return null to "Can't tell where you are. Is location on?"
             fun tenth(d: Double) = Math.round(d * 10) / 10.0
-            runCatching { Forecasts().forecast(tenth(here.lat), tenth(here.lng), null) }.getOrNull()
-                ?.also { forecast = Instant.now() to it }
-        } ?: return null
-        return Upcoming.weather(f, now)
+            runCatching { Forecasts().forecast(tenth(here.lat), tenth(here.lng), null) }
+                .onFailure { Log.w("Anthemos", "Coming up: no forecast", it) }
+                .getOrElse { return null to "The forecast didn't load: ${it.message ?: "no connection"}" }
+                .also { forecast = Instant.now() to it }
+        }
+        return Upcoming.sky(f, now) to null
     }
 
     init {

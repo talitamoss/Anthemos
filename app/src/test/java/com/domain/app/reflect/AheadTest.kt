@@ -31,6 +31,11 @@ class AheadTest {
     }
 
     @Test
+    fun `the weather on its tile`() {
+        assertEquals(Sky("18°", "Partly cloudy", "today 12 to 21°, 40% rain"), Upcoming.sky(forecast, at(today, 9)))
+    }
+
+    @Test
     fun `in the evening, tomorrow`() {
         assertEquals("18°, partly cloudy · tomorrow 14 to 22°, showers, 70% rain", Upcoming.weather(forecast, at(today, 19)))
     }

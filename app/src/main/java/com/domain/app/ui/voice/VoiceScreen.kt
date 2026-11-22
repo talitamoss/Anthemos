@@ -2,10 +2,19 @@
 package com.domain.app.ui.voice
 
 import android.Manifest
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.RectangleShape
@@ -44,8 +53,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
@@ -201,30 +208,26 @@ fun VoiceScreen(
             }
         }
 
-        // What's coming, what you've recorded, looked at, then today's entries.
-        LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)) {
-            if (ahead.weather != null || ahead.events.isNotEmpty()) {
-                item(key = "ahead") { AheadBlock(ahead) }
-            }
-            items(reflections, key = { it.id }) { ReflectionRow(it) }
+        // A dashboard: what's coming across the top, then a tile for each
+        // thing you've recorded, two by two, then today's entries.
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(GAP),
+            verticalArrangement = Arrangement.spacedBy(GAP)
+        ) {
+            item(key = "ahead", span = { GridItemSpan(maxLineSpan) }) { AheadTiles(ahead) }
+            items(reflections, key = { it.id }) { ReflectionTile(it) }
             if (today.isNotEmpty()) {
-                item(key = "today") {
-                    Text(
-                        "Today",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp)
-                    )
-                }
-                items(today, key = { it.id }) { entry -> EntryRow(entry) }
+                item(key = "today", span = { GridItemSpan(maxLineSpan) }) { TodayTile(today) }
             }
             if (reflections.isEmpty() && today.isEmpty()) {
-                item(key = "empty") {
+                item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         "Say or type what happened. It is kept on this phone, and what you record shows here.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(top = 32.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
                     )
                 }
             }
@@ -313,60 +316,100 @@ fun VoiceScreen(
     }
 }
 
-/** The weather, then the next few events: a time, quiet, and what. */
+private val GAP = 10.dp
+
+/** One tile: a thin line round a slightly raised square, its title in glaucous. */
 @Composable
-private fun AheadBlock(ahead: Ahead) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-        Text("Coming up", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-        ahead.weather?.let {
-            Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 6.dp))
-        }
-        ahead.events.forEach { e ->
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                Text(
-                    e.time,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
-                Text(
-                    e.title + (e.place?.let { " \u00b7 $it" } ?: ""),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        HorizontalDivider(Modifier.padding(top = 14.dp), thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+private fun Tile(title: String, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline)
+            .padding(14.dp)
+    ) {
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        content()
     }
 }
 
-/** One reflection: a quiet title, the number, a note, and a week of thin bars. */
+/** Quiet words on a tile: a note, or why the tile is empty. */
 @Composable
-private fun ReflectionRow(reflection: Reflection) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-        Text(reflection.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(reflection.value, style = MaterialTheme.typography.headlineMedium)
-                reflection.note?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+private fun Note(text: String, lines: Int = 2) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = lines,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+}
+
+/** The weather and what's next, side by side, the same height. */
+@Composable
+private fun AheadTiles(ahead: Ahead) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(GAP)) {
+        Tile("Weather", Modifier.weight(1f).fillMaxHeight()) {
+            val sky = ahead.sky
+            if (sky == null) {
+                Note(ahead.skyWhy ?: "Finding where you are\u2026", lines = 4)
+            } else {
+                sky.temp?.let { Text(it, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 4.dp)) }
+                sky.now?.let { Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                sky.day?.let { Note(it, lines = 3) }
             }
-            if (reflection.days.any { it != null }) Bars(reflection.days)
         }
-        HorizontalDivider(Modifier.padding(top = 14.dp), thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
+        Tile("Coming up", Modifier.weight(1f).fillMaxHeight()) {
+            if (ahead.events.isEmpty()) {
+                Note(ahead.eventsWhy ?: "Reading the calendar\u2026", lines = 4)
+            }
+            ahead.events.take(3).forEach { e ->
+                Text(e.time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                Text(
+                    e.title + (e.place?.let { " \u00b7 $it" } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+/** One reflection: what, the number, a note, and the week as thin bars. */
+@Composable
+private fun ReflectionTile(reflection: Reflection) {
+    Tile(reflection.title, Modifier.fillMaxWidth().height(150.dp)) {
+        Text(
+            reflection.value,
+            style = MaterialTheme.typography.headlineSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        reflection.note?.let { Note(it) }
+        Spacer(Modifier.weight(1f))
+        if (reflection.days.any { it != null }) Bars(reflection.days, Modifier.fillMaxWidth().height(22.dp))
+    }
+}
+
+/** What you said today, newest last. */
+@Composable
+private fun TodayTile(today: List<Entry>) {
+    Tile("Today", Modifier.fillMaxWidth()) {
+        today.forEach { EntryRow(it) }
     }
 }
 
 /** The week, oldest first: a bar for each day with something, a dot for each without. */
 @Composable
-private fun Bars(days: List<Float?>) {
+private fun Bars(days: List<Float?>, modifier: Modifier) {
     val top = days.filterNotNull().maxOrNull()?.takeIf { it > 0f } ?: 1f
     val bar = MaterialTheme.colorScheme.primary
     val empty = MaterialTheme.colorScheme.outline
-    Canvas(Modifier.size(width = 84.dp, height = 32.dp)) {
+    Canvas(modifier) {
         val step = size.width / days.size
-        val w = step * 0.45f
+        val w = step * 0.4f
         days.forEachIndexed { i, v ->
             val x = i * step + (step - w) / 2
             if (v == null || v <= 0f) {

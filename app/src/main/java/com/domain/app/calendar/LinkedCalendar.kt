@@ -37,6 +37,10 @@ class LinkedCalendar(private val context: Context) {
 
     val linked: Boolean get() = prefs.getString(LINK, null) != null
 
+    /** Why the last [events] had nothing fresh: the fetch failed (and no copy, or an old one). */
+    @Volatile var problem: String? = null
+        private set
+
     /** Checks the link reads as a calendar, then keeps it. The number of events in it. */
     fun link(url: String): Int {
         val text = fetch(url)
@@ -58,7 +62,8 @@ class LinkedCalendar(private val context: Context) {
             runCatching { fetch(url) }.onSuccess {
                 copy.writeText(it)
                 prefs.edit().putLong(FETCHED, System.currentTimeMillis()).apply()
-            }.getOrNull()
+                problem = null
+            }.onFailure { problem = it.message ?: it.javaClass.simpleName }.getOrNull()
         } else null
         val ics = text ?: copy.takeIf { it.exists() }?.readText() ?: return emptyList()
         return Ics.expand(Ics.parse(ics, ZoneId.systemDefault()), from, until)

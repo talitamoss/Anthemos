@@ -205,11 +205,11 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 ## One page
 
-Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: clean, clear, not overstimulating). From the top: Anthemos and Settings; coming up; the reflections; today's entries; what was heard and said back, with any buttons; a box to type in; and the mic, a white ring at the bottom that turns glaucous while it listens. The look is anthemos.org's: black, white, glaucous (#6ECBB5) for what matters now, grey for what is quieter, 1px lines rather than cards, JetBrains Mono throughout (`ui/theme/`, bundled, SIL Open Font License). There is no light mode and no wallpaper colour. The old Collect and Reflect pages and the bar are gone from view.
+Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: clean, clear, not overstimulating). From the top: Anthemos and Settings; coming up; the reflections; today's entries; what was heard and said back, with any buttons; a box to type in; and the mic, a white ring at the bottom that turns glaucous while it listens. The look is anthemos.org's: black, white, glaucous (#6ECBB5) for what matters now, grey for what is quieter, a dashboard of square tiles two to a row (since 2.30), each a 1px line round a barely raised black, JetBrains Mono throughout (`ui/theme/`, bundled, SIL Open Font License). There is no light mode and no wallpaper colour. The old Collect and Reflect pages and the bar are gone from view.
 
 ## Coming up
 
-At the top of the page since 2.28 (`reflect/Ahead.kt`): the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, four at most, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last six hours will do; the page never asks. The events don't wait for it. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
+At the top of the page since 2.28 (`reflect/Ahead.kt`), two tiles side by side since 2.30: the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, three on the tile, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last six hours will do; the page never asks. The events don't wait for it. When either tile is empty it says why (location not allowed, no calendar linked, the link didn't load, nothing on), so a missing one can be put right. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
 
 ## Reflections
 
@@ -324,6 +324,8 @@ link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
 
 **2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
+
+**2.30:** The page is a dashboard: Weather and Coming up side by side at the top, then a tile for each reflection, two to a row, then today. An empty tile says why it's empty.
 
 **2.29:** Coming up shows the events straight away instead of after the weather, and the weather works with approximate location.
 

@@ -14,7 +14,17 @@ import kotlin.math.roundToInt
  * the weather where you are, and your next events, Anthemos's own and the
  * linked calendar's.
  */
-data class Ahead(val weather: String? = null, val events: List<Coming> = emptyList())
+data class Ahead(
+    val sky: Sky? = null,
+    val events: List<Coming> = emptyList(),
+    /** Why there's no weather, said on the tile: no location, no forecast. */
+    val skyWhy: String? = null,
+    /** Why there are no events: no calendar linked, it didn't load, nothing on. */
+    val eventsWhy: String? = null
+)
+
+/** The weather on its tile: "18°", "Partly cloudy", "today 12 to 21° · 40% rain". */
+data class Sky(val temp: String?, val now: String?, val day: String?)
 
 /** One event coming up: when ("14:00", "Tomorrow 9:30", "Fri, all day"), what, and where. */
 data class Coming(val id: String, val time: String, val title: String, val place: String? = null)
@@ -28,15 +38,20 @@ object Upcoming {
      * evening it gives tomorrow instead of what's left of today.
      */
     fun weather(f: Forecast, now: ZonedDateTime): String? {
+        val sky = sky(f, now)
+        val current = sky.temp?.let { t -> t + (sky.now?.let { ", " + it.lowercase() } ?: "") }
+        return listOfNotNull(current, sky.day).joinToString(" · ").ifEmpty { null }
+    }
+
+    fun sky(f: Forecast, now: ZonedDateTime): Sky {
         val evening = now.hour >= 18
         val day = f.days.firstOrNull { it.date == if (evening) now.toLocalDate().plusDays(1) else now.toLocalDate() }
-        val current = f.nowTemp?.let { t -> "${t.roundToInt()}°" + (f.nowCode?.let { ", " + Weather.describe(it).lowercase() } ?: "") }
         val ahead = day?.let {
             (if (evening) "tomorrow " else "today ") + "${it.min.roundToInt()} to ${it.max.roundToInt()}°" +
                 (if (evening) ", " + Weather.describe(it.code).lowercase() else "") +
                 (if (it.rainChance >= 30) ", ${it.rainChance}% rain" else "")
         }
-        return listOfNotNull(current, ahead).joinToString(" · ").ifEmpty { null }
+        return Sky(f.nowTemp?.let { "${it.roundToInt()}°" }, f.nowCode?.let { Weather.describe(it) }, ahead)
     }
 
     /**
