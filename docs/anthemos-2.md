@@ -209,7 +209,7 @@ Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: cle
 
 ## Coming up
 
-At the top of the page since 2.28 (`reflect/Ahead.kt`), two tiles side by side since 2.30: the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, three on the tile, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last six hours will do; the page never asks. The events don't wait for it. When either tile is empty it says why (location not allowed, no calendar linked, the link didn't load, nothing on), so a missing one can be put right. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
+At the top of the page since 2.28 (`reflect/Ahead.kt`), two tiles side by side since 2.30: the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, three on the tile, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last three days will do; the page never asks. The events don't wait for it. When either tile is empty it says why (location not allowed, no calendar linked, the link didn't load, nothing on), so a missing one can be put right. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
 
 ## Reflections
 
@@ -324,6 +324,8 @@ link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
 
 **2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
+
+**2.32:** Finding where the phone is asks Android's fused location first (Android 12+), which many phones place themselves through while the network and GPS providers stay quiet; the weather tile had said it couldn't tell where you were.
 
 **2.31:** A monthly repeat like "the last weekday of the month" (BYSETPOS, or BYDAY without a number) no longer hangs reading the linked calendar, which had left both tiles stuck; such repeats are now read, and a daily one from years ago still shows. The two tiles fill independently.
 
