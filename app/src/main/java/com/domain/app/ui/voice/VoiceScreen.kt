@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
+import com.domain.app.reflect.Ahead
 import com.domain.app.reflect.Reflection
 import android.content.Context
 import androidx.compose.foundation.text.KeyboardActions
@@ -158,6 +159,7 @@ fun VoiceScreen(
     }
 
     val reflections by viewModel.reflections.collectAsState()
+    val ahead by viewModel.ahead.collectAsState()
     val listening = state.phase == VoicePhase.LISTENING
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
@@ -199,8 +201,11 @@ fun VoiceScreen(
             }
         }
 
-        // What you've recorded, looked at, then today's entries.
+        // What's coming, what you've recorded, looked at, then today's entries.
         LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp)) {
+            if (ahead.weather != null || ahead.events.isNotEmpty()) {
+                item(key = "ahead") { AheadBlock(ahead) }
+            }
             items(reflections, key = { it.id }) { ReflectionRow(it) }
             if (today.isNotEmpty()) {
                 item(key = "today") {
@@ -305,6 +310,33 @@ fun VoiceScreen(
                 Icon(if (listening) Icons.Filled.Stop else Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(32.dp))
             }
         }
+    }
+}
+
+/** The weather, then the next few events: a time, quiet, and what. */
+@Composable
+private fun AheadBlock(ahead: Ahead) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+        Text("Coming up", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        ahead.weather?.let {
+            Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 6.dp))
+        }
+        ahead.events.forEach { e ->
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Text(
+                    e.time,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+                Text(
+                    e.title + (e.place?.let { " \u00b7 $it" } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        HorizontalDivider(Modifier.padding(top = 14.dp), thickness = 1.dp, color = MaterialTheme.colorScheme.outline)
     }
 }
 

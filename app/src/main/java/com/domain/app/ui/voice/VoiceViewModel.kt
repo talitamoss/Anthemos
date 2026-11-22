@@ -25,7 +25,13 @@ import com.domain.app.place.LocationState
 import com.domain.app.prompts.Prompt
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.prompts.PromptLog
+import com.domain.app.place.Here
+import com.domain.app.place.LocationService
+import com.domain.app.reflect.Ahead
 import com.domain.app.reflect.Lenses
+import com.domain.app.reflect.Upcoming
+import com.domain.app.weather.Forecast
+import com.domain.app.weather.Forecasts
 import com.domain.app.reflect.Record
 import com.domain.app.reflect.Reflection
 import com.domain.app.sense.PhoneSense
@@ -49,7 +55,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.Instant
+import java.time.ZonedDateTime
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
@@ -192,6 +200,35 @@ class VoiceViewModel @Inject constructor(
     }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** The last forecast and when it came: asked again after half an hour. */
+    private var forecast: Pair<Instant, Forecast>? = null
+
+    /** What's coming (`reflect/Ahead.kt`): the weather here, and the next events. */
+    val ahead: StateFlow<Ahead> = combine(dataRepository.getPluginData(Event.PLUGIN_ID), looked) { points, _ ->
+        val now = ZonedDateTime.now()
+        val own = points.mapNotNull(Event::from)
+        val linked = runCatching { turn.calendar.events(now.minusHours(12).toInstant(), now.plusDays(8).toInstant()) }.getOrDefault(emptyList())
+        Ahead(weatherNow(now), Upcoming.events(own + linked, now))
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Ahead())
+
+    /**
+     * Only where location is already allowed: the page never asks. Sent to
+     * Open-Meteo rounded to a tenth of a degree, about ten kilometres.
+     */
+    private suspend fun weatherNow(now: ZonedDateTime): String? {
+        if (!LocationService.allowed(appContext)) return null
+        val fresh = forecast?.takeIf { Duration.between(it.first, Instant.now()) < Duration.ofMinutes(30) }?.second
+        val f = fresh ?: run {
+            val here = Here.now(appContext) ?: return null
+            fun tenth(d: Double) = Math.round(d * 10) / 10.0
+            runCatching { Forecasts().forecast(tenth(here.lat), tenth(here.lng), null) }.getOrNull()
+                ?.also { forecast = Instant.now() to it }
+        } ?: return null
+        return Upcoming.weather(f, now)
+    }
 
     init {
         listener.prepare()

@@ -205,7 +205,11 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 ## One page
 
-Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: clean, clear, not overstimulating). From the top: Anthemos and Settings; the reflections; today's entries; what was heard and said back, with any buttons; a box to type in; and the mic, a white ring at the bottom that turns glaucous while it listens. The look is anthemos.org's: black, white, glaucous (#6ECBB5) for what matters now, grey for what is quieter, 1px lines rather than cards, JetBrains Mono throughout (`ui/theme/`, bundled, SIL Open Font License). There is no light mode and no wallpaper colour. The old Collect and Reflect pages and the bar are gone from view.
+Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: clean, clear, not overstimulating). From the top: Anthemos and Settings; coming up; the reflections; today's entries; what was heard and said back, with any buttons; a box to type in; and the mic, a white ring at the bottom that turns glaucous while it listens. The look is anthemos.org's: black, white, glaucous (#6ECBB5) for what matters now, grey for what is quieter, 1px lines rather than cards, JetBrains Mono throughout (`ui/theme/`, bundled, SIL Open Font License). There is no light mode and no wallpaper colour. The old Collect and Reflect pages and the bar are gone from view.
+
+## Coming up
+
+At the top of the page since 2.28 (`reflect/Ahead.kt`): the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, four at most, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed; the page never asks. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
 
 ## Reflections
 
@@ -318,6 +322,8 @@ the browser; tap again to disconnect, which unlinks the phone on Kronk and
 stops live sharing), Home Assistant, Proton Calendar (paste the share
 link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
+
+**2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
 
 **2.27:** many more kinds (smoking and vaping, cannabis, alcohol-free days, steps, heart rate, blood pressure and other measures, injuries, cravings, fasting, care habits, journal, prayer, creative work, scrolling, arguments, worries, wins, ideas, goals, pets, travel, volunteering) and reflections for them and for drinks, people, work and learning. Naps no longer count as the night's sleep, and meditation isn't movement.
 
