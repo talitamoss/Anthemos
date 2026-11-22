@@ -209,7 +209,7 @@ Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: cle
 
 ## Coming up
 
-At the top of the page since 2.28 (`reflect/Ahead.kt`): the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, four at most, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed; the page never asks. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
+At the top of the page since 2.28 (`reflect/Ahead.kt`): the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, four at most, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last six hours will do; the page never asks. The events don't wait for it. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
 
 ## Reflections
 
@@ -324,6 +324,8 @@ link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
 
 **2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
+
+**2.29:** Coming up shows the events straight away instead of after the weather, and the weather works with approximate location.
 
 **2.27:** many more kinds (smoking and vaping, cannabis, alcohol-free days, steps, heart rate, blood pressure and other measures, injuries, cravings, fasting, care habits, journal, prayer, creative work, scrolling, arguments, worries, wins, ideas, goals, pets, travel, volunteering) and reflections for them and for drinks, people, work and learning. Naps no longer count as the night's sleep, and meditation isn't movement.
 

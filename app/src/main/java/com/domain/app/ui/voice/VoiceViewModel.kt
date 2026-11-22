@@ -4,6 +4,7 @@ package com.domain.app.ui.voice
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.domain.app.calendar.Event
@@ -52,6 +53,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -205,24 +207,31 @@ class VoiceViewModel @Inject constructor(
     private var forecast: Pair<Instant, Forecast>? = null
 
     /** What's coming (`reflect/Ahead.kt`): the weather here, and the next events. */
-    val ahead: StateFlow<Ahead> = combine(dataRepository.getPluginData(Event.PLUGIN_ID), looked) { points, _ ->
-        val now = ZonedDateTime.now()
-        val own = points.mapNotNull(Event::from)
-        val linked = runCatching { turn.calendar.events(now.minusHours(12).toInstant(), now.plusDays(8).toInstant()) }.getOrDefault(emptyList())
-        Ahead(weatherNow(now), Upcoming.events(own + linked, now))
-    }
+    // The events don't wait for the weather, which can take a few seconds to place.
+    val ahead: StateFlow<Ahead> = combine(
+        combine(dataRepository.getPluginData(Event.PLUGIN_ID), looked) { points, _ ->
+            val now = ZonedDateTime.now()
+            val own = points.mapNotNull(Event::from)
+            val linked = runCatching { turn.calendar.events(now.minusHours(12).toInstant(), now.plusDays(8).toInstant()) }
+                .onFailure { Log.w("Anthemos", "Coming up: the linked calendar didn't read", it) }
+                .getOrDefault(emptyList())
+            Upcoming.events(own + linked, now)
+        },
+        looked.map { weatherNow(ZonedDateTime.now()) }.onStart { emit(null) }
+    ) { events, weather -> Ahead(weather, events) }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Ahead())
 
     /**
-     * Only where location is already allowed: the page never asks. Sent to
-     * Open-Meteo rounded to a tenth of a degree, about ten kilometres.
+     * Only where location is already allowed, approximate is enough: the
+     * page never asks. Sent to Open-Meteo rounded to a tenth of a degree,
+     * about ten kilometres.
      */
     private suspend fun weatherNow(now: ZonedDateTime): String? {
-        if (!LocationService.allowed(appContext)) return null
+        if (!Here.roughlyAllowed(appContext)) return null
         val fresh = forecast?.takeIf { Duration.between(it.first, Instant.now()) < Duration.ofMinutes(30) }?.second
         val f = fresh ?: run {
-            val here = Here.now(appContext) ?: return null
+            val here = Here.near(appContext) ?: return null
             fun tenth(d: Double) = Math.round(d * 10) / 10.0
             runCatching { Forecasts().forecast(tenth(here.lat), tenth(here.lng), null) }.getOrNull()
                 ?.also { forecast = Instant.now() to it }
