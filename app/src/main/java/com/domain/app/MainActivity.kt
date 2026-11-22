@@ -5,24 +5,17 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.domain.app.kronk.KronkInbox
 import com.domain.app.voice.WakeService
 import com.domain.app.prompts.PromptInbox
-import com.domain.app.ui.components.navigation.AnthemosBottomBar
-import com.domain.app.ui.dashboard.DashboardScreen
 import com.domain.app.ui.voice.VoiceScreen
-import com.domain.app.ui.reflect.ReflectScreen
 import com.domain.app.ui.settings.navigation.SettingsNavigation
 import com.domain.app.ui.theme.AppTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -77,71 +70,25 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+/** One page (`VoiceScreen`), and Settings over it. */
 @Composable
 fun MainScreen(listenRequest: Int = 0) {
-    // Pager state for swipe navigation (3 screens: Collect, Speak, Reflect)
-    // Start on Speak (page 1) as home screen
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
-    val coroutineScope = rememberCoroutineScope()
     var showSettings by remember { mutableStateOf(false) }
 
-    // Opened to listen: show Speak.
+    // Opened to listen: back to the page.
     LaunchedEffect(listenRequest) {
-        if (listenRequest > 0) {
-            showSettings = false
-            pagerState.scrollToPage(1)
-        }
+        if (listenRequest > 0) showSettings = false
     }
 
     if (showSettings) {
-        // Settings navigation remains the same
-        SettingsNavigation(
-            onNavigateBack = {
-                showSettings = false
-            }
-        )
+        SettingsNavigation(onNavigateBack = { showSettings = false })
     } else {
-        Scaffold(
-            bottomBar = {
-                AnthemosBottomBar(
-                    currentPage = pagerState.currentPage,
-                    onPageSelected = { page ->
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(page)
-                        }
-                    }
+        Scaffold(containerColor = MaterialTheme.colorScheme.background) { paddingValues ->
+            Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                VoiceScreen(
+                    listenRequest = listenRequest,
+                    onNavigateToSettings = { showSettings = true }
                 )
-            }
-        ) { paddingValues ->
-            // HorizontalPager for swipe navigation
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) { page ->
-                when (page) {
-                    0 -> DashboardScreen(
-                        onNavigateToPlugin = { plugin ->
-                            // TODO: Navigate to plugin detail screen
-                        },
-                        onNavigateToSettings = {
-                            showSettings = true
-                        }
-                    )
-                    1 -> VoiceScreen(
-                        listenRequest = listenRequest,
-                        onNavigateToSettings = {
-                            showSettings = true
-                        }
-                    )
-                    2 -> ReflectScreen(
-                        onNavigateToSettings = {
-                            showSettings = true
-                        }
-                    )
-                }
             }
         }
     }

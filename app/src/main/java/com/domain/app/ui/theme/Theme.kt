@@ -1,47 +1,39 @@
 package com.domain.app.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+// One look, as on anthemos.org: black, white text, glaucous for what matters
+// now. No wallpaper colours and no light mode, so it stays calm and the same.
+private val Anthemos = darkColorScheme(
+    primary = Glaucous,
+    onPrimary = Ink,
+    primaryContainer = Raised,
+    onPrimaryContainer = Glaucous,
+    secondary = Glaucous,
+    onSecondary = Ink,
+    secondaryContainer = Raised,
+    onSecondaryContainer = Paper,
+    tertiary = Glaucous,
+    onTertiary = Ink,
+    background = Ink,
+    onBackground = Paper,
+    surface = Ink,
+    onSurface = Paper,
+    surfaceVariant = Raised,
+    onSurfaceVariant = Quiet,
+    surfaceContainer = Raised,
+    surfaceContainerLow = Ink,
+    surfaceContainerHigh = Raised,
+    surfaceContainerHighest = Raised,
+    outline = Line,
+    outlineVariant = Line,
+    error = Alarm,
+    onError = Ink
 )
 
 @Composable
-fun AppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+fun AppTheme(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = Anthemos, typography = Typography, content = content)
 }

@@ -25,7 +25,11 @@ import com.domain.app.place.LocationState
 import com.domain.app.prompts.Prompt
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.prompts.PromptLog
+import com.domain.app.reflect.Lenses
+import com.domain.app.reflect.Record
+import com.domain.app.reflect.Reflection
 import com.domain.app.sense.PhoneSense
+import com.domain.app.sense.Sleep
 import com.domain.app.voice.Contacts
 import com.domain.app.voice.Entry
 import com.domain.app.voice.Listener
@@ -36,6 +40,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -155,6 +161,38 @@ class VoiceViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** Bumped on coming back to the page, so what the phone saw is read again. */
+    private val looked = MutableStateFlow(0)
+
+    /** What you've recorded, looked at (`reflect/`): read from the encrypted store, on the phone. */
+    val reflections: StateFlow<List<Reflection>> = combine(dataRepository.getPluginData(Entry.PLUGIN_ID), looked) { points, _ ->
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val since = today.minusDays(8).atStartOfDay(zone).toInstant()
+        val entries = points.mapNotNull(Entry::from).filter { !it.time.isBefore(since) }
+        val sense = turn.sense
+        val week = (6 downTo 0).map { today.minusDays(it.toLong()) }
+        val nights = if (sense.allowed()) {
+            week.mapNotNull { day ->
+                val from = day.minusDays(1).atTime(18, 0).atZone(zone).toInstant()
+                val until = minOf(day.atTime(13, 0).atZone(zone).toInstant(), Instant.now())
+                if (!until.isAfter(from)) null else Sleep.guess(sense.screenOn(from, until), from, until)?.let { day to it }
+            }.toMap()
+        } else {
+            emptyMap()
+        }
+        val screen = if (sense.allowed()) {
+            week.associateWith { day ->
+                sense.screenMinutes(day.atStartOfDay(zone).toInstant(), minOf(day.plusDays(1).atStartOfDay(zone).toInstant(), Instant.now()))
+            }
+        } else {
+            emptyMap()
+        }
+        Lenses.look(Record(entries, today, zone, nights, screen))
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     init {
         listener.prepare()
         refreshSense()
@@ -269,7 +307,10 @@ class VoiceViewModel @Inject constructor(
         )
     }
 
-    fun refreshSense() = _state.update { it.copy(senseOff = !turn.sense.allowed()) }
+    fun refreshSense() {
+        _state.update { it.copy(senseOff = !turn.sense.allowed()) }
+        looked.value++
+    }
 
     fun undo() {
         viewModelScope.launch { turn.undo() }

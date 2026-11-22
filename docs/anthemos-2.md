@@ -203,11 +203,26 @@ Anthemos links to Kronk once, and from then on what it shares is signed by the p
 
 The test phone is a Pixel 8 or newer, so on-phone AI is the default and the server is only a fallback.
 
+## One page
+
+Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: clean, clear, not overstimulating). From the top: Anthemos and Settings; the reflections; today's entries; what was heard and said back, with any buttons; a box to type in; and the mic, a white ring at the bottom that turns glaucous while it listens. The look is anthemos.org's: black, white, glaucous (#6ECBB5) for what matters now, grey for what is quieter, 1px lines rather than cards, JetBrains Mono throughout (`ui/theme/`, bundled, SIL Open Font License). There is no light mode and no wallpaper colour. The old Collect and Reflect pages and the bar are gone from view.
+
+## Reflections
+
+What you've recorded, looked at, on the page above today's entries (`reflect/`). Each kind is a **lens**: it reads the record and gives one reflection (a title, a number, a short note, the last seven days as thin bars), or nothing, so only what you actually record shows. The record is the entries from the encrypted store, plus what the phone saw (sleep and screen time) when usage access is on; it is read on the phone and nothing leaves it. A new reflection is a new lens in `Lenses.ALL`.
+
+- **Sleep score**, out of 100, over the week: 70 for length against eight hours, 30 for how steady bedtime was once three are known. A night comes from what was said ("slept seven hours"), then "went to bed" and "woke up", then the phone's guess.
+- **Movement:** sport, the gym, walks and time outside this week, in minutes when said, otherwise times, and the usual one.
+- **Mood:** the week's average of scores given, and the word said most.
+- **Screen time:** today, against the days before.
+
+Sharing a reflection to Kronk comes later, and will be more open than a fixed card (Tal, 2026-11-22).
+
 ## Where it stands
 
 **alpha 1 and 2** cover steps 1–3, without a model yet:
 
-- **Speak** is the home page: the middle button in the bar. Tap the big button and talk. It shows what it heard and says what it did.
+- **Speak** is the home page: the middle button in the bar. Tap the big button and talk. It shows what it heard and says what it did. (Since 2.26 it is the only page; see One page.)
 - **Speech to text** (alpha 2) is Vosk with its small English model inside the app (`voice/Listener.kt`), so it works on GrapheneOS, which has no Google speech service, and nothing leaves the phone. The model is fetched at build time (`fetchVoskModel`) and is not in git. Alpha 1 used Android's recogniser and failed on GrapheneOS with error 5. Whisper can replace Vosk later for accuracy. The APK is arm64 only.
 - **Spoken replies** use the phone's text-to-speech. If there is none (GrapheneOS ships none; RHVoice or eSpeak can be installed), replies are only shown, and a call still asks yes or no.
 - **Understanding** is the rule-based fast path in `voice/RuleParser.kt`. It covers food ("I just had lunch, chicken and a salad"), water, coffee and tea, alcohol, movement ("went for a walk for 40 minutes"), notes ("note that ..."), calls ("call Sam") and "undo". Anything else is kept as a Journal entry with your words. Tests are in `RuleParserTest`.
@@ -285,6 +300,8 @@ the browser; tap again to disconnect, which unlinks the phone on Kronk and
 stops live sharing), Home Assistant, Proton Calendar (paste the share
 link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
+
+**2.26:** one page, in anthemos.org's black, white and glaucous, with the mic at the bottom. Reflections above today's entries: sleep score, movement, mood and screen time, from what you've recorded and what the phone saw.
 
 **2.25:** asks from Kronk. Share and Update on Kronk's Map show as a card with Move it or Share, and Not now, a tap rather than a spoken yes, and only for the Kronk account Anthemos is connected as; otherwise it says which account the ask was for. Kronk's Map then shows what happened. Connecting says which account it connected as.
 
