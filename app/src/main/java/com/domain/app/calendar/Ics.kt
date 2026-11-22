@@ -74,29 +74,46 @@ object Ics {
         val last = rule["UNTIL"]?.let { time(it, emptyMap(), e.start.zone)?.first?.toInstant() }
         val days = rule["BYDAY"]?.split(",")?.filter { it.isNotBlank() }.orEmpty()
         val monthDays = rule["BYMONTHDAY"]?.split(",")?.mapNotNull { it.toIntOrNull() }.orEmpty()
+        val positions = rule["BYSETPOS"]?.split(",")?.mapNotNull { it.toIntOrNull() }.orEmpty()
+        // Each period (day, week, month, year) is only looked at while it starts before
+        // [until], so every rule ends, even one that never lands on a day.
+        fun <T> Sequence<T>.upTo(start: (T) -> ZonedDateTime) = takeWhile { start(it).toInstant() < until }.take(PERIODS)
         val candidates: Sequence<ZonedDateTime> = when (rule["FREQ"]) {
-            "DAILY" -> generateSequence(e.start) { it.plusDays(interval) }
+            "DAILY" -> generateSequence(e.start) { it.plusDays(interval) }.upTo { it }
             "WEEKLY" -> {
                 val wanted = days.mapNotNull { DAY[it.takeLast(2)] }.ifEmpty { listOf(e.start.dayOfWeek) }.sorted()
                 val monday = e.start.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-                generateSequence(monday) { it.plusWeeks(interval) }.flatMap { week -> wanted.asSequence().map { week.with(TemporalAdjusters.nextOrSame(it)) } }
+                generateSequence(monday) { it.plusWeeks(interval) }.upTo { it }
+                    .flatMap { week -> wanted.asSequence().map { week.with(TemporalAdjusters.nextOrSame(it)) } }
             }
-            "MONTHLY" -> generateSequence(e.start.withDayOfMonth(1)) { it.plusMonths(interval) }.flatMap { month ->
-                when {
-                    days.isNotEmpty() -> days.asSequence().mapNotNull { nthDay(month, it) }
-                    monthDays.isNotEmpty() -> monthDays.asSequence().mapNotNull { dayOfMonth(month, it) }
-                    else -> sequenceOf(dayOfMonth(month, e.start.dayOfMonth)).filterNotNull()
-                }.sorted()
+            "MONTHLY" -> generateSequence(e.start.withDayOfMonth(1)) { it.plusMonths(interval) }.upTo { it }.flatMap { month ->
+                val inMonth = when {
+                    days.isNotEmpty() -> days.flatMap { inMonth(month, it) }
+                    monthDays.isNotEmpty() -> monthDays.mapNotNull { dayOfMonth(month, it) }
+                    else -> listOfNotNull(dayOfMonth(month, e.start.dayOfMonth))
+                }.distinct().sorted()
+                // "The last weekday": BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1.
+                if (positions.isEmpty()) inMonth.asSequence()
+                else positions.mapNotNull { p -> inMonth.getOrNull(if (p > 0) p - 1 else inMonth.size + p) }.sorted().asSequence()
             }
             // Counted from the start, so 29 February stays the 29th.
-            "YEARLY" -> generateSequence(0L) { it + interval }.map { e.start.plusYears(it) }.filter { it.dayOfMonth == e.start.dayOfMonth }
+            "YEARLY" -> generateSequence(0L) { it + interval }.map { e.start.plusYears(it) }.upTo { it }.filter { it.dayOfMonth == e.start.dayOfMonth }
             else -> sequenceOf(e.start)
         }
         var n = 0
-        // A rule that never lands still ends.
-        return candidates.take(MAX * 10).filter { !it.isBefore(e.start) }
-            .takeWhile { n < MAX && it.toInstant() < until && (last == null || !it.toInstant().isAfter(last)) && (count == null || n < count) }
+        return candidates.filter { !it.isBefore(e.start) }
+            .takeWhile { it.toInstant() < until && (last == null || !it.toInstant().isAfter(last)) && (count == null || n < count) }
             .onEach { n++ }
+    }
+
+    /** "2TU" is the second Tuesday, "-1FR" the last Friday, a bare "TU" every Tuesday in the month. */
+    private fun inMonth(month: ZonedDateTime, spec: String): List<ZonedDateTime> {
+        val day = DAY[spec.takeLast(2)] ?: return emptyList()
+        if (spec.length == 2) {
+            return generateSequence(month.with(TemporalAdjusters.firstInMonth(day))) { it.plusWeeks(1) }
+                .takeWhile { it.month == month.month }.toList()
+        }
+        return listOfNotNull(nthDay(month, spec))
     }
 
     /** "2TU" is the second Tuesday, "-1FR" the last Friday; a bare "TU" every Tuesday is left to weekly. */
@@ -169,7 +186,8 @@ object Ics {
 
     private fun unescape(s: String) = s.replace("\\n", " ").replace("\\N", " ").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
 
-    private const val MAX = 1000
+    /** Periods looked at for one rule at most, against a broken one. */
+    private const val PERIODS = 200_000
     private val BASIC_DATE = DateTimeFormatter.ofPattern("yyyyMMdd")
     private val BASIC_TIME = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
     private val DAY = mapOf(

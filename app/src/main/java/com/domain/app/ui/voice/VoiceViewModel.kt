@@ -211,11 +211,14 @@ class VoiceViewModel @Inject constructor(
     /**
      * What's coming (`reflect/Ahead.kt`): the weather here, and the next
      * events. When either is missing the tile says why, so it can be fixed.
-     * The events don't wait for the weather, which can take a few seconds.
+     * Each tile fills on its own: neither waits for the other.
      */
     val ahead: StateFlow<Ahead> = combine(
-        combine(dataRepository.getPluginData(Event.PLUGIN_ID), looked) { points, _ -> eventsNow(points.mapNotNull(Event::from)) },
+        combine(dataRepository.getPluginData(Event.PLUGIN_ID), looked) { points, _ -> eventsNow(points.mapNotNull(Event::from)) }
+            .onStart { emit(emptyList<Coming>() to "Reading the calendar\u2026") }
+            .flowOn(Dispatchers.IO),
         looked.map { weatherNow(ZonedDateTime.now()) }.onStart { emit(null to "Finding where you are\u2026") }
+            .flowOn(Dispatchers.IO)
     ) { (events, eventsWhy), (sky, skyWhy) -> Ahead(sky, events, skyWhy, eventsWhy) }
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Ahead())

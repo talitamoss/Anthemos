@@ -325,6 +325,8 @@ needs nothing: music, the Clock, the weather.
 
 **2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
 
+**2.31:** A monthly repeat like "the last weekday of the month" (BYSETPOS, or BYDAY without a number) no longer hangs reading the linked calendar, which had left both tiles stuck; such repeats are now read, and a daily one from years ago still shows. The two tiles fill independently.
+
 **2.30:** The page is a dashboard: Weather and Coming up side by side at the top, then a tile for each reflection, two to a row, then today. An empty tile says why it's empty.
 
 **2.29:** Coming up shows the events straight away instead of after the weather, and the weather works with approximate location.

@@ -95,4 +95,28 @@ class IcsTest {
         )
         assertEquals(null, LinkedCalendar.find("https://example.com/page"))
     }
+
+    private fun rule(rule: String, start: String = "20260105T090000") = Ics.expand(
+        Ics.parse(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:r\r\nDTSTART;TZID=Australia/Sydney:$start\r\nDURATION:PT1H\r\nRRULE:$rule\r\nSUMMARY:R\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+            zone
+        ),
+        from, until
+    ).map(::at)
+
+    @Test
+    fun `the last weekday of the month ends, and lands`() {
+        // Monday 30 November 2026 is the last weekday.
+        assertEquals(listOf("11/30 9:00"), rule("FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"))
+    }
+
+    @Test
+    fun `every tuesday of the month`() {
+        assertEquals(listOf("11/17 9:00", "11/24 9:00"), rule("FREQ=MONTHLY;BYDAY=TU"))
+    }
+
+    @Test
+    fun `a daily one from years ago still comes`() {
+        assertEquals(15, rule("FREQ=DAILY", start = "20200101T090000").size)
+    }
 }
