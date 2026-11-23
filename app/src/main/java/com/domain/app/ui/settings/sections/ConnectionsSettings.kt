@@ -70,6 +70,8 @@ fun ConnectionsSettings() {
     Line()
     ProtonCalendarConnection()
     Line()
+    PodSetting()
+    Line()
     PhoneAccess(resumed)
     Line()
     Works(Icons.Default.MusicNote, "Music", "Whichever music app plays. Nothing to connect: say play, pause, skip, or play an artist.")

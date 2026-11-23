@@ -5,6 +5,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.domain.app.core.storage.encryption.EncryptionManager
+import com.domain.app.pod.PodWorker
 import com.domain.app.prompts.PromptWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -33,6 +34,8 @@ class App : Application(), Configuration.Provider {
 
         // Anthemos 2.0: look for a due prompt every fifteen minutes.
         PromptWorker.schedule(this)
+        // Copies the store to the pod; does nothing until one is connected (pod/PodSync.kt).
+        PodWorker.schedule(this)
     }
     
     /**

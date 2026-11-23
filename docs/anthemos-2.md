@@ -207,6 +207,15 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: clean, clear, not overstimulating). From the top: Anthemos and Settings; coming up; the reflections; today's entries; what was heard and said back, with any buttons; a box to type in; and the mic, a white ring at the bottom that turns glaucous while it listens. The look is anthemos.org's: black, white, glaucous (#6ECBB5) for what matters now, grey for what is quieter, a dashboard of square tiles two to a row (since 2.30), each a 1px line round a barely raised black, JetBrains Mono throughout (`ui/theme/`, bundled, SIL Open Font License). There is no light mode and no wallpaper colour. The old Collect and Reflect pages and the bar are gone from view.
 
+## Pod
+
+Everything in the encrypted store is copied to your Solid pod (`pod/`, since 2.33; Tal, 2026-11-23: sealed on the phone). Settings, Connections, Pod: the pod's address, and a client credential made on the pod's account page (`/.account/`, Client credentials, for your WebID), its id and secret. Anthemos swaps them for a short-lived token bound to a key made for the session (DPoP, `pod/Dpop.kt`, `pod/PodClient.kt`), so a copied token is no use alone.
+
+- **Sealed first.** Each item is encrypted with AES-256-GCM under a key made on the phone (`pod/Seal.kt`) and goes as one file under `anthemos/v1/`, named by an HMAC of its id, so the pod and whoever hosts it see only scrambled files with meaningless names. The key is kept in the phone's encrypted preferences and shown once at connecting as a **recovery code** (52 letters and digits in groups of four), to keep in a password manager; Settings can show it again. Without it the pod's copy can't be read; no one can recover it.
+- **Sending** (`pod/PodSync.kt`, `pod/PodWorker.kt`): every hour on a network, and on Sync now. What is new or changed goes up (an item is marked sent only if it didn't change on the way); what was deleted here is deleted there. A phone with nothing in it never empties the pod.
+- **A new phone:** connect to the same pod with its recovery code, and the pod's items are brought onto the phone before anything is sent. Two phones writing to one pod comes later (it needs a record of deletions).
+- Tal's pod is `https://pod.anthemos.org/tal/` (Community Solid Server 7.3.0, no sign-ups). Connecting from the app for anyone, and making a pod from the app, come next.
+
 ## Coming up
 
 At the top of the page since 2.28 (`reflect/Ahead.kt`), two tiles side by side since 2.30: the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, three on the tile, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last three days will do; the page never asks. The events don't wait for it. When either tile is empty it says why (location not allowed, no calendar linked, the link didn't load, nothing on), so a missing one can be put right. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
@@ -325,6 +334,8 @@ needs nothing: music, the Clock, the weather.
 
 **2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
 
+**2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
+
 **2.32:** Finding where the phone is asks Android's fused location first (Android 12+), which many phones place themselves through while the network and GPS providers stay quiet; the weather tile had said it couldn't tell where you were.
 
 **2.31:** A monthly repeat like "the last weekday of the month" (BYSETPOS, or BYDAY without a number) no longer hangs reading the linked calendar, which had left both tiles stuck; such repeats are now read, and a daily one from years ago still shows. The two tiles fill independently.
@@ -353,7 +364,7 @@ needs nothing: music, the Clock, the weather.
 - **Location** (alpha 12): stays at places named by voice, from the trail when it's on (above, Places).
 - **Steps:** the phone's step counter sensor, no Google Fit.
 
-**Not yet:** signatures on entries, the on-device language model, spoken questions, the full default-assistant role (`VoiceInteractionService`), a wake word, pod sync.
+**Not yet:** signatures on entries, the on-device language model, spoken questions, the full default-assistant role (`VoiceInteractionService`), a wake word.
 
 ## Outside things we need
 

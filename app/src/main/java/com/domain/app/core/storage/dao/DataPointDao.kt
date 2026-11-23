@@ -111,6 +111,10 @@ interface DataPointDao {
     @Query("UPDATE data_points SET synced = :synced WHERE id = :id")
     suspend fun updateSyncStatus(id: String, synced: Boolean)
     
+    /** Marks an item sent to the pod, unless it changed while it was on its way. */
+    @Query("UPDATE data_points SET synced = 1 WHERE id = :id AND valueJson = :valueJson AND IFNULL(metadataJson, '') = IFNULL(:metadataJson, '')")
+    suspend fun markSynced(id: String, valueJson: String, metadataJson: String?)
+
     @Query("UPDATE data_points SET synced = :synced WHERE id IN (:ids)")
     suspend fun updateSyncStatusBatch(ids: List<String>, synced: Boolean)
     
