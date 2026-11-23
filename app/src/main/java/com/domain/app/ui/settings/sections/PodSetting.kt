@@ -2,6 +2,12 @@
 package com.domain.app.ui.settings.sections
 
 import android.content.ClipData
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import com.domain.app.pod.PodInbox
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
@@ -64,20 +70,7 @@ fun PodSetting() {
         onClick = { open = true }
     )
 
-    code?.let { shown ->
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Your recovery code") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Save it in your password manager. It is the only way to read your pod's copy on a new phone; no one, us included, can recover it.", style = MaterialTheme.typography.bodySmall)
-                    SelectionContainer { Text(shown, style = MaterialTheme.typography.bodyLarge) }
-                }
-            },
-            confirmButton = { TextButton(onClick = { code = null; tick++ }) { Text("I've saved it") } },
-            dismissButton = { TextButton(onClick = { copy(context, shown) }) { Text("Copy") } }
-        )
-    }
+    code?.let { RecoveryCodeDialog(it) { code = null; tick++ } }
 
     if (!open) return
     var pod by remember { mutableStateOf(status.pod ?: "https://pod.anthemos.org/tal/") }
@@ -95,6 +88,12 @@ fun PodSetting() {
                 if (status.connected) {
                     Text(message ?: "Copying to ${status.pod}. Each item is sealed on this phone before it goes, so the pod holds only scrambled files.", style = MaterialTheme.typography.bodySmall)
                 } else {
+                    Text("New here? Make a pod by signing in with Kronk. Only your Kronk username is shared.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = {
+                        open = false
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PodSync.SIGNUP + "start")))
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Create with Kronk") }
+                    Text("Or connect a pod you have:", style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(pod, { pod = it }, singleLine = true, label = { Text("Pod address") }, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(id, { id = it }, singleLine = true, label = { Text("Token id") }, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(secret, { secret = it }, singleLine = true, label = { Text("Token secret") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
@@ -149,6 +148,109 @@ fun PodSetting() {
             } else {
                 TextButton(onClick = { open = false }) { Text("Cancel") }
             }
+        }
+    )
+}
+
+/** Shown once at connecting, and again from Settings. */
+@Composable
+private fun RecoveryCodeDialog(shown: String, onDone: () -> Unit) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Your recovery code") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Save it in your password manager. It is the only way to read your pod's copy on a new phone; no one, us included, can recover it.", style = MaterialTheme.typography.bodySmall)
+                SelectionContainer { Text(shown, style = MaterialTheme.typography.bodyLarge) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("I've saved it") } },
+        dismissButton = { TextButton(onClick = { copy(context, shown) }) { Text("Copy") } }
+    )
+}
+
+/**
+ * Back from making a pod with Kronk (`PodInbox`): trades the pickup code for
+ * the pod's credential and connects. A pod made before, from another phone,
+ * asks for its recovery code first.
+ */
+@Composable
+fun PodJoin() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pickup by PodInbox.code.collectAsState()
+    var joined by remember { mutableStateOf<PodSync.Joined?>(null) }
+    var needCode by remember { mutableStateOf(false) }
+    var recovery by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var code by remember { mutableStateOf<String?>(null) }
+    val sync = remember { PodSync(context) }
+    val dao = remember { EntryPointAccessors.fromApplication(context.applicationContext, PodEntry::class.java).dao() }
+
+    fun connect(j: PodSync.Joined) {
+        busy = true
+        message = "Connecting to your pod…"
+        scope.launch {
+            val result = runCatching { withContext(Dispatchers.IO) { sync.connect(dao, j.pod, j.id, j.secret, recovery.takeIf { needCode }) } }
+            busy = false
+            result.onSuccess {
+                PodWorker.schedule(context)
+                PodWorker.now(context)
+                joined = null
+                code = it
+            }.onFailure {
+                if (!needCode && it.message?.contains("recovery code") == true) {
+                    needCode = true
+                    message = "Your pod already has Anthemos data from before. Enter its recovery code to bring it here."
+                } else {
+                    message = it.message ?: "That didn't connect"
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(pickup) {
+        val c = pickup ?: return@LaunchedEffect
+        PodInbox.code.value = null
+        needCode = false
+        recovery = ""
+        message = "Setting up your pod…"
+        busy = true
+        val result = runCatching { withContext(Dispatchers.IO) { sync.pickup(c) } }
+        busy = false
+        result.onSuccess { joined = it; connect(it) }.onFailure { message = it.message; joined = null }
+    }
+
+    code?.let { RecoveryCodeDialog(it) { code = null } }
+    val j = joined
+    if (j == null && message == null) return
+    if (j == null && !busy) {
+        AlertDialog(
+            onDismissRequest = { message = null },
+            title = { Text("Pod") },
+            text = { Text(message.orEmpty()) },
+            confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } }
+        )
+        return
+    }
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(j?.let { "Pod for @${it.username}" } ?: "Pod") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(message.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                if (needCode) {
+                    OutlinedTextField(recovery, { recovery = it }, singleLine = true, label = { Text("Recovery code") }, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {
+            if (needCode && j != null) TextButton(enabled = !busy && recovery.isNotBlank(), onClick = { connect(j) }) { Text("Connect") }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = { joined = null; message = null }) { Text("Cancel") }
         }
     )
 }

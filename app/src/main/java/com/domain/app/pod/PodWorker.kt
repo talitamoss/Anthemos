@@ -68,3 +68,14 @@ class PodWorker @AssistedInject constructor(
 interface PodEntry {
     fun dao(): DataPointDao
 }
+
+/** The way back from making a pod with Kronk: anthemos://pod/joined?code=<pickup code>. */
+object PodInbox {
+    val code = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    fun receive(intent: android.content.Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme != "anthemos" || data.host != "pod" || data.path != "/joined") return
+        code.value = data.getQueryParameter("code")?.takeIf { c -> c.isNotEmpty() && c.all { it.isLetterOrDigit() || it == '-' || it == '_' } }
+    }
+}

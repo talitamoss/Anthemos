@@ -16,6 +16,8 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.ByteString.Companion.decodeBase64
 import okio.ByteString.Companion.toByteString
 import java.time.Instant
@@ -83,6 +85,23 @@ class PodSync(private val context: Context) {
 
     fun forget() = prefs.edit().clear().apply()
 
+    /** What the sign-up service handed over for a pickup code: the pod and a credential for it. */
+    data class Joined(val pod: String, val id: String, val secret: String, val username: String, val new: Boolean)
+
+    /** Trades the one-time code from the browser for the pod's credential. */
+    fun pickup(code: String): Joined {
+        val request = okhttp3.Request.Builder().url(SIGNUP + "pickup")
+            .post(buildJsonObject { put("code", code) }.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        okhttp3.OkHttpClient().newCall(request).execute().use { r ->
+            if (r.code == 404) throw PodClient.PodError("That sign-up had expired. Try Create with Kronk again.")
+            if (!r.isSuccessful) throw PodClient.PodError("The pod sign-up said ${r.code}")
+            val o = Json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject
+            fun s(k: String) = o[k]?.jsonPrimitive?.content ?: throw PodClient.PodError("The pod sign-up left out $k")
+            return Joined(s("pod"), s("id"), s("secret"), s("username"), o["new"]?.jsonPrimitive?.content == "true")
+        }
+    }
+
     /** Sends what changed and removes what was deleted. The number of items there after. */
     suspend fun sync(dao: DataPointDao): Int {
         val pod = prefs.getString(POD, null) ?: return 0
@@ -116,6 +135,8 @@ class PodSync(private val context: Context) {
 
     companion object {
         const val DIR = "anthemos/v1/"
+        /** Makes a pod by signing in with Kronk (the sign-up service on the anthemos server). */
+        const val SIGNUP = "https://pod.anthemos.org/signup/"
         private const val POD = "pod"
         private const val ID = "id"
         private const val SECRET = "secret"

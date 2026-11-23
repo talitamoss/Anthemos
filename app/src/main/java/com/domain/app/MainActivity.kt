@@ -10,6 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.domain.app.kronk.KronkInbox
+import com.domain.app.pod.PodInbox
+import com.domain.app.ui.settings.sections.PodJoin
 import com.domain.app.voice.WakeService
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.ui.voice.VoiceScreen
@@ -27,6 +29,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) noteListen(intent)
         KronkInbox.receive(intent)
+        PodInbox.receive(intent)
         setContent {
             AppTheme {
                 MainScreen(listenRequest)
@@ -38,6 +41,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         noteListen(intent)
         KronkInbox.receive(intent)
+        PodInbox.receive(intent)
     }
 
     override fun onResume() {
@@ -79,6 +83,9 @@ fun MainScreen(listenRequest: Int = 0) {
     LaunchedEffect(listenRequest) {
         if (listenRequest > 0) showSettings = false
     }
+
+    // Back from making a pod with Kronk, on whichever screen is up.
+    PodJoin()
 
     if (showSettings) {
         SettingsNavigation(onNavigateBack = { showSettings = false })

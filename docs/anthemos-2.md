@@ -214,7 +214,8 @@ Everything in the encrypted store is copied to your Solid pod (`pod/`, since 2.3
 - **Sealed first.** Each item is encrypted with AES-256-GCM under a key made on the phone (`pod/Seal.kt`) and goes as one file under `anthemos/v1/`, named by an HMAC of its id, so the pod and whoever hosts it see only scrambled files with meaningless names. The key is kept in the phone's encrypted preferences and shown once at connecting as a **recovery code** (52 letters and digits in groups of four), to keep in a password manager; Settings can show it again. Without it the pod's copy can't be read; no one can recover it.
 - **Sending** (`pod/PodSync.kt`, `pod/PodWorker.kt`): every hour on a network, and on Sync now. What is new or changed goes up (an item is marked sent only if it didn't change on the way); what was deleted here is deleted there. A phone with nothing in it never empties the pod.
 - **A new phone:** connect to the same pod with its recovery code, and the pod's items are brought onto the phone before anything is sent. Two phones writing to one pod comes later (it needs a record of deletions).
-- Tal's pod is `https://pod.anthemos.org/tal/` (Community Solid Server 7.3.0, no sign-ups). Connecting from the app for anyone, and making a pod from the app, come next.
+- **Making a pod with Kronk** (since 2.34): Settings, Pod, Create with Kronk opens `pod.anthemos.org/signup/start` in the browser. Kronk asks whether Anthemos Pods may know who you are (`openid profile` only: your username, nothing to post with). A small service on the anthemos server (`signup.py`, standard library only) makes your pod at `pod.anthemos.org/<kronk username>/` the first time, with its top folder private and only the profile public, and a fresh client credential each time you sign in. The browser comes back to `anthemos://pod/joined` with a one-time pickup code, which the app trades for the credential, so no secret is ever in a web address; then it connects as above and shows the recovery code. Signing in again from a new phone finds the same pod and asks for its recovery code. Accounts can only be made by that service: the pod server refuses account creation from outside. Each pod may hold 1 GB, watched nightly rather than enforced (the pod server's own quota re-measures the whole pod on every write). Later (Tal, 2026-11-23), the other way round: logging in to Kronk with Anthemos, the pod's identity being the one that stays.
+- Tal's pod is `https://pod.anthemos.org/tal/` (Community Solid Server 7.3.0), made before sign-ups by hand.
 
 ## Coming up
 
@@ -333,6 +334,8 @@ link), screen time and location (each opens the phone's setting), and what
 needs nothing: music, the Clock, the weather.
 
 **2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
+
+**2.34:** Make a pod by signing in with Kronk (above, Pod).
 
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 

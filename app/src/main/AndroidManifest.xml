@@ -90,6 +90,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="anthemos" android:host="kronk" />
             </intent-filter>
+            <!-- Back from making a pod with Kronk (pod/PodSync.kt). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="anthemos" android:host="pod" />
+            </intent-filter>
         </activity>
 
         <service
