@@ -69,13 +69,25 @@ interface PodEntry {
     fun dao(): DataPointDao
 }
 
-/** The way back from making a pod with Kronk: anthemos://pod/joined?code=<pickup code>. */
+/**
+ * The way back from making a pod with Kronk: anthemos://pod/joined?code=<pickup code>,
+ * or ?claim=<token>&name=<pod> when a pod with that name is already there and
+ * the app asks for its own login to link it.
+ */
 object PodInbox {
     val code = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val claim = kotlinx.coroutines.flow.MutableStateFlow<Claim?>(null)
+
+    data class Claim(val token: String, val name: String)
 
     fun receive(intent: android.content.Intent?) {
         val data = intent?.data ?: return
         if (data.scheme != "anthemos" || data.host != "pod" || data.path != "/joined") return
-        code.value = data.getQueryParameter("code")?.takeIf { c -> c.isNotEmpty() && c.all { it.isLetterOrDigit() || it == '-' || it == '_' } }
+        code.value = data.getQueryParameter("code")?.takeIf(::plain)
+        val token = data.getQueryParameter("claim")?.takeIf(::plain)
+        val name = data.getQueryParameter("name")?.takeIf(::plain)
+        if (token != null && name != null) claim.value = Claim(token, name)
     }
+
+    private fun plain(s: String) = s.isNotEmpty() && s.all { it.isLetterOrDigit() || it == '-' || it == '_' }
 }

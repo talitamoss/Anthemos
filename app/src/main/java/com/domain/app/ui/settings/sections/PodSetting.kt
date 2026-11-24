@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.browser.customtabs.CustomTabsIntent
 import com.domain.app.pod.PodInbox
 import android.content.ClipboardManager
 import android.content.Context
@@ -91,7 +92,8 @@ fun PodSetting() {
                     Text("New here? Make a pod by signing in with Kronk. Only your Kronk username is shared.", style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = {
                         open = false
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PodSync.SIGNUP + "start")))
+                        // Over Anthemos rather than off to the browser; Kronk's own page confirms who you are.
+                        CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(context, Uri.parse(PodSync.SIGNUP + "start"))
                     }, modifier = Modifier.fillMaxWidth()) { Text("Create with Kronk") }
                     Text("Or connect a pod you have:", style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(pod, { pod = it }, singleLine = true, label = { Text("Pod address") }, modifier = Modifier.fillMaxWidth())
@@ -173,13 +175,17 @@ private fun RecoveryCodeDialog(shown: String, onDone: () -> Unit) {
 /**
  * Back from making a pod with Kronk (`PodInbox`): trades the pickup code for
  * the pod's credential and connects. A pod made before, from another phone,
- * asks for its recovery code first.
+ * asks for its recovery code first. A pod already there that Kronk sign-up
+ * didn't make (made by hand) asks for its own login once, to link it.
  */
 @Composable
 fun PodJoin() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pickup by PodInbox.code.collectAsState()
+    val claim by PodInbox.claim.collectAsState()
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var joined by remember { mutableStateOf<PodSync.Joined?>(null) }
     var needCode by remember { mutableStateOf(false) }
     var recovery by remember { mutableStateOf("") }
@@ -223,7 +229,55 @@ fun PodJoin() {
         result.onSuccess { joined = it; connect(it) }.onFailure { message = it.message; joined = null }
     }
 
+    LaunchedEffect(claim) {
+        if (claim != null) message = null
+    }
+
+    fun link(c: PodInbox.Claim) {
+        busy = true
+        scope.launch {
+            val result = runCatching { withContext(Dispatchers.IO) { sync.claim(c.token, email.trim(), password) } }
+            busy = false
+            result.onSuccess {
+                PodInbox.claim.value = null
+                password = ""
+                joined = it
+                connect(it)
+            }.onFailure {
+                message = it.message ?: "That didn't link"
+                if (it !is PodSync.ClaimRefused || !it.again) {
+                    PodInbox.claim.value = null
+                    password = ""
+                }
+            }
+        }
+    }
+
     code?.let { RecoveryCodeDialog(it) { code = null } }
+    claim?.let { c ->
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Link your pod") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (busy) "Linking your pod…" else message
+                            ?: "A pod named ${c.name} is already on pod.anthemos.org. If it's yours, sign in to it once to link it to your Kronk account. The password is used only now, never kept.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedTextField(email, { email = it }, singleLine = true, label = { Text("The pod's login email") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(password, { password = it }, singleLine = true, label = { Text("Its password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !busy && email.isNotBlank() && password.isNotEmpty(), onClick = { link(c) }) { Text("Link") }
+            },
+            dismissButton = {
+                TextButton(enabled = !busy, onClick = { PodInbox.claim.value = null; password = ""; message = null }) { Text("Cancel") }
+            }
+        )
+        return
+    }
     val j = joined
     if (j == null && message == null) return
     if (j == null && !busy) {

@@ -157,6 +157,8 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Create with Kronk opens over Anthemos, not off in the browser.
+    implementation("androidx.browser:browser:1.8.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // On-device speech to text (voice/Listener.kt)

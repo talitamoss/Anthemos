@@ -102,6 +102,27 @@ class PodSync(private val context: Context) {
         }
     }
 
+    /** The pod's own login didn't link it; [again] is false once the sign-in has ended. */
+    class ClaimRefused(message: String, val again: Boolean) : Exception(message)
+
+    /** Links a pod already there with its own login, for the Kronk sign-in [token] stands for. */
+    fun claim(token: String, email: String, password: String): Joined {
+        val body = buildJsonObject { put("token", token); put("email", email); put("password", password) }
+        val request = okhttp3.Request.Builder().url(SIGNUP + "claim")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        okhttp3.OkHttpClient().newCall(request).execute().use { r ->
+            val o = runCatching { Json.parseToJsonElement(r.body?.string().orEmpty()).jsonObject }.getOrNull()
+            if (!r.isSuccessful) {
+                val said = o?.get("error")?.jsonPrimitive?.content ?: "The pod sign-up said ${r.code}"
+                throw ClaimRefused(said, again = r.code == 401)
+            }
+            if (o == null) throw PodClient.PodError("The pod sign-up's answer couldn't be read")
+            fun s(k: String) = o[k]?.jsonPrimitive?.content ?: throw PodClient.PodError("The pod sign-up left out $k")
+            return Joined(s("pod"), s("id"), s("secret"), s("username"), false)
+        }
+    }
+
     /** Sends what changed and removes what was deleted. The number of items there after. */
     suspend fun sync(dao: DataPointDao): Int {
         val pod = prefs.getString(POD, null) ?: return 0
