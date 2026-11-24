@@ -54,6 +54,8 @@ object TextingApp {
      * offered for every text link. Switched off again once it isn't the texting app.
      */
     fun tidy(context: Context) {
+        // Not while texts wait: the phone may not have made Anthemos the texting app yet.
+        if (PhoneBackup(context).textsWaiting) return
         if (Telephony.Sms.getDefaultSmsPackage(context) != context.packageName) parts(context, on = false)
     }
 

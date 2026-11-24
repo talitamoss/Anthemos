@@ -225,7 +225,7 @@ What a phone reset loses and no other backup keeps: your contacts, texts and cal
 - **Sealed the same way** as the store, with the pod's key and recovery code, under `anthemos/phone/v1/`. Texts and calls go in one file a month, contacts in one file, plus a list of the files and how many records each holds (`backup/Pack.kt`).
 - **Daily** (`BackupWorker`, on a network and not on a low battery), and on Back up now. Only months that changed since the last run are sent. A changed month is added to what the pod already holds, never put in its place, so a wiped or new phone can't shrink the backup, and deleting something on the phone doesn't delete it from the pod. A contact is matched by name, so an edited contact replaces its old copy; a text by number, time, direction and words; a call by number, time and direction.
 - **What's kept:** each record's own columns, less what only means something on one phone (ids, threads, SIM slots, a photo's file id). Contacts keep the standard details (numbers, emails, addresses, birthdays, notes, photo…), not group memberships or other apps' entries (WhatsApp's, say). Not MMS yet.
-- **Restore to this phone** adds only what the phone is missing; nothing on it is changed or removed. Contacts come back as contacts kept on the phone, not in an account. Android lets only the texting app write texts, so for texts Anthemos asks to be the texting app for that moment, then sends you to choose yours again (`backup/TextingApp.kt`). The parts a texting app must have are switched off except then, so Anthemos isn't offered for text links. A text arriving meanwhile is filed in the inbox; an MMS in that moment is lost.
+- **Restore to this phone** adds only what the phone is missing; nothing on it is changed or removed. Contacts come back as contacts kept on the phone, not in an account. Android lets only the texting app write texts, so for texts Anthemos asks to be the texting app for that moment, then sends you to choose yours again (`backup/TextingApp.kt`). Becoming the texting app can restart Anthemos, so the texts are marked as waiting (for ten minutes) and put back by `TextsRestore` on whichever screen Anthemos opens to, not by the Settings dialog that asked (2.41). The parts a texting app must have are switched off except then, so Anthemos isn't offered for text links. A text arriving meanwhile is filed in the inbox; an MMS in that moment is lost.
 - **Allowed by you:** contacts, texts and call log permissions, asked when backup is turned on or a restore starts. A kind not allowed is left out. Android keeps Wi-Fi passwords, other apps' data and system settings from apps, so those can't be backed up here.
 
 ## Coming up
@@ -359,6 +359,8 @@ needs nothing: music, the Clock, the weather.
 **2.39:** Phone backup: contacts, texts and call log kept on your pod daily, sealed, and put back on a new or reset phone (above, Phone backup).
 
 **2.40:** Connecting to your pod after Create with Kronk no longer stays on "Connecting to your pod…" once it's done; the recovery code shows.
+
+**2.41:** Restoring texts finishes after Anthemos becomes the texting app; it had stopped there, because Android restarts Anthemos at that point (above, Phone backup).
 
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 

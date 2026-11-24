@@ -53,6 +53,15 @@ class PhoneBackup(private val context: Context) {
     /** Whether Anthemos may read this kind; the ones it may not are left out. */
     fun allowed(kind: String) = READ[kind]!!.let { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
 
+    /**
+     * Texts waiting to be put back once Anthemos is the texting app. Kept, not
+     * held on a screen: becoming the texting app restarts Anthemos (2.40).
+     */
+    var textsWaiting: Boolean
+        // Ten minutes: a request turned down or left doesn't wait for ever.
+        get() = System.currentTimeMillis() - prefs.getLong(TEXTS_WAITING, 0) < 10 * 60_000
+        set(value) = prefs.edit().putLong(TEXTS_WAITING, if (value) System.currentTimeMillis() else 0).apply()
+
     /** Texts can only be written by the phone's texting app, so Anthemos is that for the moment it restores them. */
     fun isTextingApp() = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
 
@@ -121,6 +130,7 @@ class PhoneBackup(private val context: Context) {
         private const val PROBLEM = "problem"
         private const val INDEX = "index"
         private const val SEEN = "seen:"
+        private const val TEXTS_WAITING = "texts_waiting"
 
         val NAMES = mapOf(Pack.CONTACTS to "contacts", Pack.TEXTS to "texts", Pack.CALLS to "calls")
         private val READ = mapOf(

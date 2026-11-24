@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import com.domain.app.kronk.KronkInbox
 import com.domain.app.pod.PodInbox
 import com.domain.app.ui.settings.sections.PodJoin
+import com.domain.app.ui.settings.sections.TextsRestore
 import com.domain.app.voice.WakeService
 import com.domain.app.prompts.PromptInbox
 import com.domain.app.ui.voice.VoiceScreen
@@ -86,6 +87,8 @@ fun MainScreen(listenRequest: Int = 0) {
 
     // Back from making a pod with Kronk, on whichever screen is up.
     PodJoin()
+    // Texts waiting to be put back, once Anthemos is the texting app (it restarts on becoming it).
+    TextsRestore()
 
     if (showSettings) {
         SettingsNavigation(onNavigateBack = { showSettings = false })

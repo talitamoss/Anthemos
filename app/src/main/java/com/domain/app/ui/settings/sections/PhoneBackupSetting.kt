@@ -14,6 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -23,6 +26,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.dp
 import com.domain.app.backup.Pack
 import com.domain.app.backup.PhoneBackup
@@ -51,7 +57,6 @@ fun PhoneBackupSetting(resumed: Int) {
     var restoring by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var handBack by remember { mutableStateOf(false) }
     val chosen = remember { mutableStateListOf(*Pack.KINDS.toTypedArray()) }
     var next by remember { mutableStateOf<(() -> Unit)?>(null) }
 
@@ -64,23 +69,37 @@ fun PhoneBackupSetting(resumed: Int) {
         permissions.launch(PhoneBackup.PERMISSIONS)
     }
 
+    // Asked for a result: Android only takes the request from an app waiting on one.
+    // Anthemos may restart meanwhile, so TextsRestore, not this, carries on.
+    val texting = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        TextsRestoreSignal.check.value++
+    }
+
+    /**
+     * Contacts and calls now; texts are left waiting for TextsRestore, which puts
+     * them back once Anthemos is the texting app, whichever screen it comes back to.
+     */
     fun restore() {
         busy = true
         scope.launch {
-            val kinds = chosen.filter { it != Pack.TEXTS || backup.isTextingApp() }
-            val result = runCatching { withContext(Dispatchers.IO) { backup.restore(kinds) { message = "Putting back $it…" } } }
+            val now = chosen.filter { it != Pack.TEXTS }
+            val result = runCatching { withContext(Dispatchers.IO) { backup.restore(now) { message = "Putting back $it…" } } }
             busy = false
             tick++
             message = result.fold({ added ->
-                val said = added.entries.joinToString(", ") { "${it.value} ${PhoneBackup.NAMES[it.key]}" }
-                val skipped = if (Pack.TEXTS in chosen && Pack.TEXTS !in kinds) " Texts were left: Anthemos wasn't made the texting app." else ""
-                "Added $said.$skipped"
+                added.entries.joinToString(", ", "Added ", ".") { "${it.value} ${PhoneBackup.NAMES[it.key]}" }.takeIf { added.isNotEmpty() }
             }, { it.message ?: "That didn't finish" })
-            if (Pack.TEXTS in kinds) handBack = true
+            if (result.isSuccess && Pack.TEXTS in chosen) {
+                backup.textsWaiting = true
+                if (backup.isTextingApp()) TextsRestoreSignal.check.value++
+                else {
+                    open = false
+                    restoring = false
+                    texting.launch(TextingApp.ask(context))
+                }
+            }
         }
     }
-
-    val texting = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { restore() }
 
     SettingsItem(
         icon = Icons.Default.Backup,
@@ -95,21 +114,6 @@ fun PhoneBackupSetting(resumed: Int) {
         },
         onClick = { if (pod) { open = true; message = null } }
     )
-
-    if (handBack) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Texts are back") },
-            text = { Text("Now choose your usual texting app again, so new texts go to it.", style = MaterialTheme.typography.bodySmall) },
-            confirmButton = {
-                TextButton(onClick = {
-                    handBack = false
-                    runCatching { context.startActivity(TextingApp.handBack(context)) }
-                }) { Text("Choose texting app") }
-            }
-        )
-        return
-    }
 
     if (!open) return
     AlertDialog(
@@ -142,9 +146,7 @@ fun PhoneBackupSetting(resumed: Int) {
         confirmButton = {
             when {
                 restoring -> TextButton(enabled = !busy && chosen.isNotEmpty(), onClick = {
-                    allowed {
-                        if (Pack.TEXTS in chosen && !backup.isTextingApp()) texting.launch(TextingApp.ask(context)) else restore()
-                    }
+                    allowed { restore() }
                 }) { Text("Restore") }
                 status.on -> TextButton(enabled = !busy, onClick = {
                     busy = true
@@ -189,6 +191,62 @@ fun PhoneBackupSetting(resumed: Int) {
                     Text(if (restoring) "Back" else "Close")
                 }
             }
+        }
+    )
+}
+
+/** A nudge to look for waiting texts now, without waiting to come back to the app. */
+object TextsRestoreSignal {
+    val check = kotlinx.coroutines.flow.MutableStateFlow(0)
+}
+
+/**
+ * Puts back texts left waiting by Restore to this phone, once Anthemos is the
+ * texting app. On the main screen, not Settings: Android restarts Anthemos when
+ * it becomes the texting app, so it comes back to wherever it opens (2.40).
+ * Then sends you to choose your usual texting app again.
+ */
+@Composable
+fun TextsRestore() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val backup = remember { PhoneBackup(context) }
+    var resumed by remember { mutableIntStateOf(0) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) resumed++ }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    val nudged by TextsRestoreSignal.check.collectAsState()
+    var message by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    LaunchedEffect(resumed, nudged) {
+        if (busy || !backup.textsWaiting || !backup.isTextingApp()) return@LaunchedEffect
+        busy = true
+        message = "Putting your texts back…"
+        scope.launch {
+            val result = runCatching { withContext(Dispatchers.IO) { backup.restore(listOf(Pack.TEXTS)) } }
+            backup.textsWaiting = false
+            busy = false
+            message = result.fold(
+                { "Added ${it[Pack.TEXTS] ?: 0} texts. Now choose your usual texting app again, so new texts go to it." },
+                { "Texts didn't come back: ${it.message ?: "something went wrong"}. Choose your usual texting app again, then try Restore once more." }
+            )
+        }
+    }
+
+    val shown = message ?: return
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Your texts") },
+        text = { Text(shown, style = MaterialTheme.typography.bodySmall) },
+        confirmButton = {
+            if (!busy) TextButton(onClick = {
+                message = null
+                runCatching { context.startActivity(TextingApp.handBack(context)) }
+            }) { Text("Choose texting app") }
         }
     )
 }
