@@ -13,8 +13,15 @@ class WakePhraseTest {
     }
 
     @Test
+    fun `the name, its sureness split between alike spellings, still counts`() {
+        // Tal's phone, 2.35: hey 100%, poly 38%.
+        assertTrue(WakePhrase.heard(listOf("hey" to 1.0, "poly" to 0.38)))
+    }
+
+    @Test
     fun `an unsure guess does not`() {
-        assertFalse(WakePhrase.heard(listOf("hey" to 1.0, "poly" to 0.5)))
+        assertFalse(WakePhrase.heard(listOf("hey" to 1.0, "poly" to 0.2)))
+        assertFalse(WakePhrase.heard(listOf("hey" to 0.5, "poly" to 1.0)))
     }
 
     @Test
@@ -35,5 +42,7 @@ class WakePhraseTest {
         assertTrue(WakePhrase.GRAMMAR.contains("\"hey poly\""))
         assertTrue(WakePhrase.GRAMMAR.contains("\"holy\""))
         assertTrue(WakePhrase.GRAMMAR.contains("\"[unk]\""))
+        // One spelling per sound, so the name's sureness splits less.
+        assertFalse(WakePhrase.GRAMMAR.contains("\"hey paulie\""))
     }
 }

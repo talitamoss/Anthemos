@@ -417,10 +417,17 @@ class SilenceWatch(private val limitMs: Long = LIMIT_MS) {
  * - the words around the phrase are in its list too ([DECOYS]), so ordinary
  *   speech lands on them rather than on the phrase;
  * - the phrase must be all that was said, not part of a sentence;
- * - and the recogniser must be sure of both words ([MIN_CONF]).
+ * - and the recogniser must be sure of "hey" ([MIN_CONF]) and fairly sure
+ *   of the name ([NAME_CONF]). The name is shared between spellings that
+ *   sound alike, so its sureness is split: Tal's "Hey Poly" came back as
+ *   hey 100%, poly 38% against four spellings (2.35). The recogniser is
+ *   given only two of them ([SPOKEN]); all four still count when heard.
  */
 object WakePhrase {
     val PHRASES = listOf("hey poly", "hey polly", "hey pauly", "hey paulie")
+
+    /** The spellings the recogniser chooses between: one per sound, so they split less. */
+    private val SPOKEN = listOf("hey poly", "hey polly")
 
     /** Sounds near the phrase, and common short things said, for speech to land on. */
     private val DECOYS = listOf(
@@ -429,14 +436,17 @@ object WakePhrase {
         "polo", "paul", "pearly", "hey paul", "hey babe", "hey buddy", "hey baby", "hey you"
     )
 
-    val GRAMMAR = (PHRASES + DECOYS + "[unk]").joinToString(",", "[", "]") { "\"$it\"" }
+    val GRAMMAR = (SPOKEN + DECOYS + "[unk]").joinToString(",", "[", "]") { "\"$it\"" }
 
-    /** How sure of each word the recogniser must be, from 0 to 1. */
+    /** How sure of "hey" the recogniser must be, from 0 to 1. */
     const val MIN_CONF = 0.8
+
+    /** How sure of the name: lower, since it's shared between alike spellings. */
+    const val NAME_CONF = 0.3
 
     fun heard(words: List<Pair<String, Double>>): Boolean {
         if (words.size != 2) return false
         val said = words.joinToString(" ") { it.first }
-        return said in PHRASES && words.all { it.second >= MIN_CONF }
+        return said in PHRASES && words[0].second >= MIN_CONF && words[1].second >= NAME_CONF
     }
 }
