@@ -219,14 +219,19 @@ fun PodJoin() {
 
     LaunchedEffect(pickup) {
         val c = pickup ?: return@LaunchedEffect
-        PodInbox.code.value = null
         needCode = false
         recovery = ""
         message = "Setting up your pod…"
         busy = true
-        val result = runCatching { withContext(Dispatchers.IO) { sync.pickup(c) } }
-        busy = false
-        result.onSuccess { joined = it; connect(it) }.onFailure { message = it.message; joined = null }
+        // In its own scope, not this effect's: clearing the code below changes
+        // the effect's key, which cancels the effect ("The coroutine scope left
+        // the composition", 2.34 to 2.37).
+        scope.launch {
+            val result = runCatching { withContext(Dispatchers.IO) { sync.pickup(c) } }
+            busy = false
+            result.onSuccess { joined = it; connect(it) }.onFailure { message = it.message; joined = null }
+        }
+        PodInbox.code.value = null
     }
 
     LaunchedEffect(claim) {

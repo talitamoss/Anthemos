@@ -344,6 +344,8 @@ needs nothing: music, the Clock, the weather.
 
 **2.37:** Create with Kronk opens over Anthemos, and a pod that's already there is linked in the app with its own login (above, Pod).
 
+**2.38:** Create with Kronk finishes: coming back with a pickup code no longer fails with "The coroutine scope left the composition".
+
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 
 **2.32:** Finding where the phone is asks Android's fused location first (Android 12+), which many phones place themselves through while the network and GPS providers stay quiet; the weather tile had said it couldn't tell where you were.
