@@ -35,6 +35,7 @@ The **Hey Poly** switch in Settings (`ui/settings/sections/HeyPolySetting.kt`) t
 - **Nothing is kept or sent.** Audio is only checked for the phrase, on the phone, by the same Vosk model Speak uses (loaded once for both, `voice/SpeechModel.kt`).
 - **Light on battery:** each fifth of a second is measured first, and only sound louder than the room's own noise goes to the recogniser (`SoundGate`), which knows only the phrase. It lets go of the microphone during calls, on battery saver, below 15% (unless charging), and while Speak is listening.
 - **Android's limits:** a foreground service with a notification, and GrapheneOS's microphone dot, while it runs. It can only take the microphone while Anthemos is on screen, so after a restart a notification asks for one tap. Opening Speak from the background needs "Display over other apps", asked for when it's switched on; without it, hearing the phrase shows a "Tap to talk" notification.
+- **It says what it's doing** (since 2.35): under the switch, what it's doing now (listening, paused and why, another app has the microphone, stopped) and the last words it heard with how sure it was of each, so "it doesn't hear me" can be told apart from "it hears me as something else". It can't look on while hearing nothing: if Android hands it only zeros for 20 seconds (`SilenceWatch`: muted after being started again from the background, or the phone's microphone switch off) it stops and a notification asks for a tap; a Speak turn that never said it ended stops counting after two minutes; a crash stops the service instead of leaving its notification up.
 
 ## Commands
 
@@ -215,7 +216,7 @@ Everything in the encrypted store is copied to your Solid pod (`pod/`, since 2.3
 - **Sending** (`pod/PodSync.kt`, `pod/PodWorker.kt`): every hour on a network, and on Sync now. What is new or changed goes up (an item is marked sent only if it didn't change on the way); what was deleted here is deleted there. A phone with nothing in it never empties the pod.
 - **A new phone:** connect to the same pod with its recovery code, and the pod's items are brought onto the phone before anything is sent. Two phones writing to one pod comes later (it needs a record of deletions).
 - **Making a pod with Kronk** (since 2.34): Settings, Pod, Create with Kronk opens `pod.anthemos.org/signup/start` in the browser. Kronk asks whether Anthemos Pods may know who you are (`openid profile` only: your username, nothing to post with). A small service on the anthemos server (`signup.py`, standard library only) makes your pod at `pod.anthemos.org/<kronk username>/` the first time, with its top folder private and only the profile public, and a fresh client credential each time you sign in. The browser comes back to `anthemos://pod/joined` with a one-time pickup code, which the app trades for the credential, so no secret is ever in a web address; then it connects as above and shows the recovery code. Signing in again from a new phone finds the same pod and asks for its recovery code. Accounts can only be made by that service: the pod server refuses account creation from outside. Each pod may hold 1 GB, watched nightly rather than enforced (the pod server's own quota re-measures the whole pod on every write). Later (Tal, 2026-11-23), the other way round: logging in to Kronk with Anthemos, the pod's identity being the one that stays.
-- Tal's pod is `https://pod.anthemos.org/tal/` (Community Solid Server 7.3.0), made before sign-ups by hand.
+- Tal's pod is `https://pod.anthemos.org/tal/` (Community Solid Server 7.2.0; 7.3.0 crashed hourly), made before sign-ups by hand.
 
 ## Coming up
 
@@ -336,6 +337,8 @@ needs nothing: music, the Clock, the weather.
 **2.28:** Coming up at the top of the page: the weather, and your next events from Anthemos and the linked calendar.
 
 **2.34:** Make a pod by signing in with Kronk (above, Pod).
+
+**2.35:** Hey Poly says what it's doing and what it last heard, and no longer looks on while hearing nothing (above, Hey Poly).
 
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 

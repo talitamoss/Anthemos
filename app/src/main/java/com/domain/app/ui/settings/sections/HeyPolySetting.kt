@@ -49,7 +49,10 @@ fun HeyPolySetting() {
         subtitle = when {
             !on -> "Off. Turn on to start Speak by saying \"Hey Poly\"."
             !Settings.canDrawOverlays(context) -> "On. Allow Display over other apps so it can open Speak."
-            else -> "Listening for \"Hey Poly\""
+            else -> listOfNotNull(
+                WakeService.status ?: "Open Anthemos to start it",
+                WakeService.lastHeard?.let { "Last heard: $it" }
+            ).joinToString("\n")
         },
         checked = on,
         onCheckedChange = { value ->

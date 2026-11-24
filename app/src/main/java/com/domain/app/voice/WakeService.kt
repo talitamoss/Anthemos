@@ -41,6 +41,11 @@ import kotlin.math.sqrt
  * - the recogniser knows only the phrase, nothing else;
  * - the microphone is let go of during calls, on battery saver, below 15%,
  *   and while Speak is listening itself.
+ *
+ * And it says what it's doing ([status], [lastHeard], shown in Settings), and
+ * doesn't sit there looking on while hearing nothing: Android's silence
+ * ([SilenceWatch]), a Speak turn that never ended, or a crash each end in
+ * a notification or a restart rather than a quiet stop.
  */
 class WakeService : Service() {
 
@@ -67,6 +72,7 @@ class WakeService : Service() {
     }
 
     override fun onDestroy() {
+        if (status?.startsWith("Stopped") != true) status = "Stopped. Open Anthemos to start it again."
         running = false
         thread?.interrupt()
         super.onDestroy()
@@ -75,62 +81,89 @@ class WakeService : Service() {
     // ── Listening ─────────────────────────────────────────────────────
 
     private fun loop() {
-        val model = runCatching { SpeechModel.get(this) }.getOrNull() ?: return stopSelf()
+        status = "Starting"
+        val model = runCatching { SpeechModel.get(this) }.getOrNull()
+        if (model == null) {
+            status = "Stopped: the speech model wouldn't load"
+            return stopSelf()
+        }
         val recognizer = Recognizer(model, RATE.toFloat(), WakePhrase.GRAMMAR).apply { setWords(true) }
         val gate = SoundGate()
         try {
             while (running) {
-                if (shouldPause()) {
+                val pause = pauseReason()
+                if (pause != null) {
+                    status = pause
                     Thread.sleep(PAUSE_CHECK_MS)
                     continue
                 }
-                if (listenUntilHeard(recognizer, gate)) heard()
+                when (listenUntilHeard(recognizer, gate)) {
+                    Outcome.Heard -> heard()
+                    Outcome.Silenced -> {
+                        status = "Stopped: Android gave it only silence"
+                        askForTap(this, "Tap to keep listening for Hey Poly", "Android stopped the microphone. If its switch is off, turn it on.")
+                        running = false
+                        stopSelf()
+                    }
+                    Outcome.LetGo -> {}
+                }
             }
         } catch (_: InterruptedException) {
             // stopped
+        } catch (e: Throwable) {
+            // Not a quiet stop behind a notification that says it's listening.
+            status = "Stopped: ${e.javaClass.simpleName}. Open Anthemos to start it again."
+            stopSelf()
         } finally {
             recognizer.close()
         }
     }
 
+    private enum class Outcome { Heard, LetGo, Silenced }
+
     /**
-     * Opens the microphone and listens until the phrase is heard (true), or
-     * until it should let go (false). The microphone is closed either way.
+     * Opens the microphone and listens until the phrase is heard, until it
+     * should let go, or until Android has given only silence for a while.
+     * The microphone is closed either way.
      */
     @SuppressLint("MissingPermission") // allowed() is checked before the service runs
-    private fun listenUntilHeard(recognizer: Recognizer, gate: SoundGate): Boolean {
+    private fun listenUntilHeard(recognizer: Recognizer, gate: SoundGate): Outcome {
         val size = maxOf(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), CHUNK * 2 * 4)
         val record = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, size)
         if (record.state != AudioRecord.STATE_INITIALIZED) {
             record.release()
+            status = "Waiting: another app has the microphone"
             Thread.sleep(PAUSE_CHECK_MS)
-            return false
+            return Outcome.LetGo
         }
         val chunk = ShortArray(CHUNK)
         var before: ShortArray? = null
         var checked = System.currentTimeMillis()
+        val silence = SilenceWatch()
         try {
             record.startRecording()
+            status = "Listening for \"Hey Poly\""
             while (running) {
                 val n = record.read(chunk, 0, CHUNK)
                 if (n <= 0) continue
                 val now = System.currentTimeMillis()
+                if (silence.take(chunk, n, now)) return Outcome.Silenced
                 if (now - checked > PAUSE_CHECK_MS) {
                     checked = now
-                    if (shouldPause()) return false
+                    if (pauseReason() != null) return Outcome.LetGo
                 }
                 when (gate.take(chunk, n)) {
                     SoundGate.Quiet -> before = chunk.copyOf(n)
                     SoundGate.Start -> {
                         // The start of "hey" may be in the chunk before the sound rose.
                         before?.let { recognizer.acceptWaveForm(it, it.size) }
-                        if (feed(recognizer, chunk, n)) return true
+                        if (feed(recognizer, chunk, n)) return Outcome.Heard
                     }
-                    SoundGate.Sound -> if (feed(recognizer, chunk, n)) return true
+                    SoundGate.Sound -> if (feed(recognizer, chunk, n)) return Outcome.Heard
                     SoundGate.End -> {
-                        val heard = WakePhrase.heard(words(recognizer.finalResult))
+                        val heard = WakePhrase.heard(note(words(recognizer.finalResult)))
                         recognizer.reset()
-                        if (heard) return true
+                        if (heard) return Outcome.Heard
                     }
                 }
             }
@@ -138,7 +171,7 @@ class WakeService : Service() {
             runCatching { record.stop() }
             record.release()
         }
-        return false
+        return Outcome.LetGo
     }
 
     /**
@@ -148,7 +181,7 @@ class WakeService : Service() {
      */
     private fun feed(recognizer: Recognizer, chunk: ShortArray, n: Int): Boolean {
         if (!recognizer.acceptWaveForm(chunk, n)) return false
-        if (!WakePhrase.heard(words(recognizer.result))) return false
+        if (!WakePhrase.heard(note(words(recognizer.result)))) return false
         recognizer.reset()
         return true
     }
@@ -158,6 +191,15 @@ class WakeService : Service() {
         val list = JSONObject(json).optJSONArray("result") ?: return emptyList()
         (0 until list.length()).map { i -> list.getJSONObject(i).let { it.optString("word") to it.optDouble("conf", 0.0) } }
     }.getOrDefault(emptyList())
+
+    /** Keeps what was last heard, and how sure, for Settings: shows whether it hears at all. */
+    private fun note(words: List<Pair<String, Double>>): List<Pair<String, Double>> {
+        val said = words.filter { it.first != "[unk]" }
+        if (said.isNotEmpty()) {
+            lastHeard = said.joinToString(" ") { "${it.first} ${(it.second * 100).toInt()}%" }
+        }
+        return words
+    }
 
     /** A short tone, then Speak opens listening (over the lock screen if need be). */
     private fun heard() {
@@ -187,15 +229,15 @@ class WakeService : Service() {
         if (System.currentTimeMillis() >= waitUntil) appListening = false
     }
 
-    /** Let go of the microphone: Speak has it, a call, battery saver, or low battery. */
-    private fun shouldPause(): Boolean {
-        if (appListening) return true
+    /** Why to let go of the microphone (Speak has it, a call, battery saver, low battery), or null. */
+    private fun pauseReason(): String? {
+        if (appListening) return "Paused: Speak is listening"
         val audio = getSystemService(AudioManager::class.java)
-        if (audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_IN_COMMUNICATION) return true
-        if (getSystemService(PowerManager::class.java).isPowerSaveMode) return true
+        if (audio.mode == AudioManager.MODE_IN_CALL || audio.mode == AudioManager.MODE_IN_COMMUNICATION) return "Paused: a call"
+        if (getSystemService(PowerManager::class.java).isPowerSaveMode) return "Paused: battery saver is on"
         val battery = getSystemService(BatteryManager::class.java)
         val level = battery.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-        return level in 0 until LOW_BATTERY && !battery.isCharging
+        return if (level in 0 until LOW_BATTERY && !battery.isCharging) "Paused: battery below $LOW_BATTERY%" else null
     }
 
     private fun notification(): Notification {
@@ -223,9 +265,28 @@ class WakeService : Service() {
         private const val CHANNEL = "hey_poly"
         private const val NOTIFICATION_ID = 7302
         private const val HEARD_ID = 7303
+        private const val TAP_ID = 7304
+        /** Longer than any Speak turn (60 s) or the wait for one ([TAKEOVER_MS]). */
+        private const val SPEAK_LIMIT_MS = 120_000L
 
-        /** Speak is listening itself: Hey Poly lets go of the microphone. */
-        @Volatile var appListening = false
+        @Volatile private var listeningSince = 0L
+
+        /**
+         * Speak is listening itself: Hey Poly lets go of the microphone. A
+         * turn that never said it ended (Anthemos closed mid-sentence) stops
+         * counting after [SPEAK_LIMIT_MS], so Hey Poly never waits for good.
+         */
+        var appListening: Boolean
+            get() = listeningSince != 0L && System.currentTimeMillis() - listeningSince < SPEAK_LIMIT_MS
+            set(value) { listeningSince = if (value) System.currentTimeMillis() else 0L }
+
+        /** What it's doing now, for Settings. */
+        @Volatile var status: String? = null
+            private set
+
+        /** The last words it heard and how sure it was of each, for Settings. */
+        @Volatile var lastHeard: String? = null
+            private set
 
         private fun prefs(context: Context) = context.getSharedPreferences("anthemos_wake", Context.MODE_PRIVATE)
 
@@ -243,7 +304,27 @@ class WakeService : Service() {
         /** Starts it if it's on: call while Anthemos is on screen (Android allows the microphone then). */
         fun refresh(context: Context) {
             val intent = Intent(context, WakeService::class.java)
-            if (on(context) && allowed(context)) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
+            if (on(context) && allowed(context)) {
+                context.getSystemService(NotificationManager::class.java).cancel(TAP_ID)
+                ContextCompat.startForegroundService(context, intent)
+            } else {
+                context.stopService(intent)
+                status = null
+            }
+        }
+
+        /** Android won't let Anthemos take the microphone by itself: a notification asks for one tap. */
+        internal fun askForTap(context: Context, title: String, text: String) {
+            channel(context)
+            val open = PendingIntent.getActivity(
+                context, 3, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+            )
+            context.getSystemService(NotificationManager::class.java).notify(
+                TAP_ID,
+                NotificationCompat.Builder(context, CHANNEL).setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                    .setContentTitle(title).setContentText(text)
+                    .setContentIntent(open).setAutoCancel(true).build()
+            )
         }
 
         internal fun channel(context: Context) {
@@ -299,17 +380,33 @@ class SoundGate {
 class WakeOnBoot : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED || !WakeService.on(context)) return
-        WakeService.channel(context)
-        val open = PendingIntent.getActivity(
-            context, 3, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
-        )
-        context.getSystemService(NotificationManager::class.java).notify(
-            7304,
-            NotificationCompat.Builder(context, "hey_poly").setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .setContentTitle("Tap to keep listening for Hey Poly")
-                .setContentText("Android needs a tap after a restart")
-                .setContentIntent(open).setAutoCancel(true).build()
-        )
+        WakeService.askForTap(context, "Tap to keep listening for Hey Poly", "Android needs a tap after a restart")
+    }
+}
+
+/**
+ * Notices when Android hands over nothing but zeros. A real microphone is
+ * never exactly silent; zeros mean Android has muted Anthemos (it was
+ * started again from the background, or the phone's microphone switch is
+ * off), and listening on would hear nothing while looking on.
+ */
+class SilenceWatch(private val limitMs: Long = LIMIT_MS) {
+    private var since = -1L
+
+    /** True once only zeros have come for [limitMs]. */
+    fun take(chunk: ShortArray, n: Int, now: Long): Boolean {
+        var zeros = true
+        for (i in 0 until n) if (chunk[i].toInt() != 0) { zeros = false; break }
+        if (!zeros) {
+            since = -1L
+            return false
+        }
+        if (since < 0) since = now
+        return now - since >= limitMs
+    }
+
+    companion object {
+        const val LIMIT_MS = 20_000L
     }
 }
 
