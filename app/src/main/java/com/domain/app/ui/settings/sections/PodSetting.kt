@@ -205,6 +205,8 @@ fun PodJoin() {
                 PodWorker.schedule(context)
                 PodWorker.now(context)
                 joined = null
+                // Cleared, or "Connecting to your pod…" stayed up over the recovery code (2.39).
+                message = null
                 code = it
             }.onFailure {
                 if (!needCode && it.message?.contains("recovery code") == true) {

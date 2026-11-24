@@ -358,6 +358,8 @@ needs nothing: music, the Clock, the weather.
 
 **2.39:** Phone backup: contacts, texts and call log kept on your pod daily, sealed, and put back on a new or reset phone (above, Phone backup).
 
+**2.40:** Connecting to your pod after Create with Kronk no longer stays on "Connecting to your pod…" once it's done; the recovery code shows.
+
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 
 **2.32:** Finding where the phone is asks Android's fused location first (Android 12+), which many phones place themselves through while the network and GPS providers stay quiet; the weather tile had said it couldn't tell where you were.
