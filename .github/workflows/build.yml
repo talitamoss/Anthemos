@@ -84,3 +84,7 @@ jobs:
           if [ -f app/build/outputs/apk/debug/anthemos2-latest.json ]; then
             scp app/build/outputs/apk/debug/anthemos2-latest.json deploy@anthemos.org:/var/www/anthemos/builds/
           fi
+          # Keep the newest ten of this line's builds; each is ~80 MB. anthemos.org/anthemos.apk
+          # is a link to the latest link, so the site's Download button follows every build.
+          LATEST=${{ steps.rename.outputs.latest }}
+          ssh deploy@anthemos.org "cd /var/www/anthemos/builds && ls -1t ${LATEST%-latest.apk}-2*.apk | tail -n +11 | xargs -r rm -f --"
