@@ -11,6 +11,12 @@ android {
     namespace = "com.domain.app"
     compileSdk = 34
 
+    // The speech and database engines go in compressed: ~8 MB less to download,
+    // unpacked once at install.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     defaultConfig {
         // Anthemos 2.0 installs beside 1.x, so it never touches 1.x data.
         applicationId = "com.anthemos.app.two"
@@ -45,8 +51,13 @@ android {
         debug {
             if (keystore != null) signingConfig = signingConfigs.getByName("anthemos")
         }
+        // Trimmed (docs/anthemos-2.md, "Builds"): only the code and pictures the app
+        // reaches go in, about half the download. Signed with the same key as the
+        // debug builds, so it installs over them and they over it.
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            if (keystore != null) signingConfig = signingConfigs.getByName("anthemos")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

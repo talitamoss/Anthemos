@@ -1,21 +1,26 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Kept through trimming (docs/anthemos-2.md, "Builds"): code reached in ways
+# R8 can't follow. AndroidX, Hilt, Room, WorkManager, OkHttp, Retrofit and
+# kotlinx.serialization bring their own rules.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Crash reports still name the file and line.
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Vosk (speech) reaches its native library through JNA, which finds Java
+# classes and methods by name from native code.
+-keep class org.vosk.** { *; }
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class * extends com.sun.jna.** { public *; }
+-dontwarn java.awt.**
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# SQLCipher (the encrypted store) calls back into Java from native code.
+-keep class net.sqlcipher.** { *; }
+-dontwarn net.sqlcipher.**
+
+# Gson reads and writes the Direct API's models by their field names.
+-keep class com.domain.app.core.direct.api.** { *; }
+-keepattributes Signature, *Annotation*
+
+# EncryptedSharedPreferences (Tink) references classes it doesn't ship.
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**

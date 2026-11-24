@@ -2,7 +2,7 @@ name: Build & Deploy APK
 
 on:
   push:
-    branches: [smart-anthemos, anthemos-2]
+    branches: [smart-anthemos, anthemos-2, anthemos-2-trim]
   workflow_dispatch:
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
         run: ./gradlew testDebugUnitTest
 
       - name: Signing key
-        if: github.ref_name == 'anthemos-2'
+        if: github.ref_name == 'anthemos-2' || github.ref_name == 'anthemos-2-trim'
         env:
           KEYSTORE_B64: ${{ secrets.ANTHEMOS_KEYSTORE_B64 }}
         run: |
@@ -35,10 +35,19 @@ jobs:
           echo "ANTHEMOS_KEYSTORE=$RUNNER_TEMP/anthemos.jks" >> $GITHUB_ENV
           echo "ANTHEMOS_BUILD=$((100 + GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
 
-      - name: Build Debug APK
+      # anthemos-2-trim tries the trimmed build (docs/anthemos-2.md, "Builds") as a
+      # test download, without touching the latest link or the in-app updater.
+      - name: Build APK
         env:
           ANTHEMOS_KEYSTORE_PASSWORD: ${{ secrets.ANTHEMOS_KEYSTORE_PASSWORD }}
-        run: ./gradlew assembleDebug
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "anthemos-2-trim" ]; then
+            ./gradlew assembleRelease
+            mkdir -p app/build/outputs/apk/debug
+            mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/debug/app-debug.apk
+          else
+            ./gradlew assembleDebug
+          fi
 
       - name: Rename APK with timestamp
         id: rename
@@ -49,6 +58,7 @@ jobs:
           PREFIX=anthemos
           LATEST=anthemos-latest.apk
           if [ "${GITHUB_REF_NAME}" = "anthemos-2" ]; then PREFIX=anthemos2; LATEST=anthemos2-latest.apk; fi
+          if [ "${GITHUB_REF_NAME}" = "anthemos-2-trim" ]; then PREFIX=anthemos2-trim; LATEST=anthemos2-trim-latest.apk; fi
           APK_NAME="${PREFIX}-${TIMESTAMP}-${SHORT_SHA}.apk"
           mv app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/${APK_NAME}
           echo "apk_name=${APK_NAME}" >> $GITHUB_OUTPUT
