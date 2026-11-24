@@ -36,6 +36,8 @@ class App : Application(), Configuration.Provider {
         PromptWorker.schedule(this)
         // Copies the store to the pod; does nothing until one is connected (pod/PodSync.kt).
         PodWorker.schedule(this)
+        // Contacts, texts and calls to the pod once a day, once turned on (backup/PhoneBackup.kt).
+        if (com.domain.app.backup.PhoneBackup(this).on) com.domain.app.backup.BackupWorker.schedule(this)
     }
     
     /**

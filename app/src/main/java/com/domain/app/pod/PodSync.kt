@@ -154,6 +154,13 @@ class PodSync(private val context: Context) {
 
     private fun seal() = prefs.getString(KEY, null)?.decodeBase64()?.toByteArray()?.let(::Seal)
 
+    /** The pod and its key, for other copies kept there (backup/PhoneBackup.kt); null when not connected. */
+    fun open(): Pair<PodClient, Seal>? {
+        val pod = prefs.getString(POD, null) ?: return null
+        val seal = seal() ?: return null
+        return PodClient(pod, prefs.getString(ID, "")!!, prefs.getString(SECRET, "")!!) to seal
+    }
+
     companion object {
         const val DIR = "anthemos/v1/"
         /** Makes a pod by signing in with Kronk (the sign-up service on the anthemos server). */

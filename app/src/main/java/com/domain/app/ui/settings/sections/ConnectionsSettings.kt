@@ -72,6 +72,8 @@ fun ConnectionsSettings() {
     Line()
     PodSetting()
     Line()
+    PhoneBackupSetting(resumed)
+    Line()
     PhoneAccess(resumed)
     Line()
     Works(Icons.Default.MusicNote, "Music", "Whichever music app plays. Nothing to connect: say play, pause, skip, or play an artist.")
