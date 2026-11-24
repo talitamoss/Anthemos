@@ -362,6 +362,8 @@ needs nothing: music, the Clock, the weather.
 
 **2.41:** Restoring texts finishes after Anthemos becomes the texting app; it had stopped there, because Android restarts Anthemos at that point (above, Phone backup).
 
+**2.42:** Restoring texts waits up to a minute for Android to report Anthemos as the texting app (it had looked once, too soon, and stopped), and says so if it never does.
+
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 
 **2.32:** Finding where the phone is asks Android's fused location first (Android 12+), which many phones place themselves through while the network and GPS providers stay quiet; the weather tile had said it couldn't tell where you were.

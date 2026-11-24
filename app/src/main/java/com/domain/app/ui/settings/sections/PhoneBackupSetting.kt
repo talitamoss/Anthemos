@@ -36,6 +36,7 @@ import com.domain.app.backup.TextingApp
 import com.domain.app.pod.PodSync
 import com.domain.app.ui.settings.SettingsItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.ZoneId
@@ -223,7 +224,20 @@ fun TextsRestore() {
     var busy by remember { mutableStateOf(false) }
 
     LaunchedEffect(resumed, nudged) {
-        if (busy || !backup.textsWaiting || !backup.isTextingApp()) return@LaunchedEffect
+        if (busy || !backup.textsWaiting) return@LaunchedEffect
+        // Android can say yes before it reports Anthemos as the texting app, so after
+        // an answer, look again for a minute (2.42: it had looked once, too soon).
+        if (!backup.isTextingApp()) {
+            if (nudged == 0) return@LaunchedEffect
+            message = "Waiting for Android to make Anthemos the texting app…"
+            var waited = 0
+            while (!backup.isTextingApp() && waited < 60) { delay(1000); waited++ }
+            if (!backup.isTextingApp()) {
+                backup.textsWaiting = false
+                message = "Android didn't make Anthemos the texting app, so the texts weren't put back. Try Restore again, and choose Anthemos when Android asks."
+                return@LaunchedEffect
+            }
+        }
         busy = true
         message = "Putting your texts back…"
         scope.launch {
@@ -243,10 +257,12 @@ fun TextsRestore() {
         title = { Text("Your texts") },
         text = { Text(shown, style = MaterialTheme.typography.bodySmall) },
         confirmButton = {
-            if (!busy) TextButton(onClick = {
+            if (busy) Unit
+            else if (backup.isTextingApp()) TextButton(onClick = {
                 message = null
                 runCatching { context.startActivity(TextingApp.handBack(context)) }
             }) { Text("Choose texting app") }
+            else TextButton(onClick = { message = null }) { Text("OK") }
         }
     )
 }
