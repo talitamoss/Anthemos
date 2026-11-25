@@ -6,10 +6,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -84,7 +87,7 @@ fun PhoneBackupSetting(resumed: Int) {
         busy = true
         scope.launch {
             val now = chosen.filter { it != Pack.TEXTS }
-            val result = runCatching { withContext(Dispatchers.IO) { backup.restore(now) { message = "Putting back $it…" } } }
+            val result = runCatching { withContext(Dispatchers.IO) { backup.restore(now, progress = { message = "Putting back $it…" }) } }
             busy = false
             tick++
             message = result.fold({ added ->
@@ -222,6 +225,7 @@ fun TextsRestore() {
     val nudged by TextsRestoreSignal.check.collectAsState()
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     LaunchedEffect(resumed, nudged) {
         if (busy || !backup.textsWaiting) return@LaunchedEffect
@@ -241,7 +245,8 @@ fun TextsRestore() {
         busy = true
         message = "Putting your texts back…"
         scope.launch {
-            val result = runCatching { withContext(Dispatchers.IO) { backup.restore(listOf(Pack.TEXTS)) } }
+            val result = runCatching { withContext(Dispatchers.IO) { backup.restore(listOf(Pack.TEXTS), done = { d, t -> progress = d to t }) } }
+            progress = null
             backup.textsWaiting = false
             busy = false
             message = result.fold(
@@ -255,7 +260,15 @@ fun TextsRestore() {
     AlertDialog(
         onDismissRequest = {},
         title = { Text("Your texts") },
-        text = { Text(shown, style = MaterialTheme.typography.bodySmall) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(shown, style = MaterialTheme.typography.bodySmall)
+                progress?.let { (d, t) ->
+                    LinearProgressIndicator(progress = { if (t == 0) 0f else d.toFloat() / t }, modifier = Modifier.fillMaxWidth())
+                    Text("%,d of %,d".format(d, t), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
         confirmButton = {
             if (busy) Unit
             else if (backup.isTextingApp()) TextButton(onClick = {

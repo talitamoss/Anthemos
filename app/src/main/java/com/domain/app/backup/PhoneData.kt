@@ -39,14 +39,24 @@ class PhoneData(private val context: Context) {
      * Adds the records this phone doesn't have. How many the phone took: a texting
      * provider quietly ignores writes from an app that isn't the texting app.
      */
-    fun write(kind: String, items: List<JsonObject>): Int {
+    fun write(kind: String, items: List<JsonObject>, done: (Int, Int) -> Unit = { _, _ -> }): Int {
         val have = read(kind).map { Pack.key(kind, it) }.toHashSet()
         val missing = items.filter { Pack.key(kind, it) !in have }.distinctBy { Pack.key(kind, it) }
         if (missing.isEmpty()) return 0
-        return when (kind) {
-            Pack.CONTACTS -> { addContacts(missing); missing.size }
-            Pack.TEXTS -> missing.chunked(500).sumOf { cr.bulkInsert(Telephony.Sms.CONTENT_URI, it.map(::values).toTypedArray()) }
-            else -> missing.chunked(500).sumOf { cr.bulkInsert(CallLog.Calls.CONTENT_URI, it.map(::values).toTypedArray()) }
+        done(0, missing.size)
+        if (kind == Pack.CONTACTS) {
+            addContacts(missing)
+            done(missing.size, missing.size)
+            return missing.size
+        }
+        val uri = if (kind == Pack.TEXTS) Telephony.Sms.CONTENT_URI else CallLog.Calls.CONTENT_URI
+        // A hundred at a time, so a progress bar moves: filing texts into conversations is slow.
+        var sent = 0
+        return missing.chunked(100).sumOf { chunk ->
+            cr.bulkInsert(uri, chunk.map(::values).toTypedArray()).also {
+                sent += chunk.size
+                done(sent, missing.size)
+            }
         }
     }
 

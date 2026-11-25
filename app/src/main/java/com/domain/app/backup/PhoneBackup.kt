@@ -105,7 +105,7 @@ class PhoneBackup(private val context: Context) {
     }
 
     /** Puts back what this phone is missing, for each kind asked. How many of each were added. */
-    fun restore(kinds: List<String>, progress: (String) -> Unit = {}): Map<String, Int> {
+    fun restore(kinds: List<String>, progress: (String) -> Unit = {}, done: (Int, Int) -> Unit = { _, _ -> }): Map<String, Int> {
         val (client, seal) = PodSync(context).open() ?: throw PodClient.PodError("Connect a pod first")
         val index = index(client, seal) ?: throw PodClient.PodError("Nothing is backed up on the pod yet")
         return kinds.associateWith { kind ->
@@ -114,7 +114,7 @@ class PhoneBackup(private val context: Context) {
             val items = index.counts.keys.filter { Pack.kindOf(it) == kind }.flatMap { bundle ->
                 client.get(path(seal, bundle))?.let { Pack.decode(seal.open(it)) }.orEmpty()
             }
-            data.write(kind, items)
+            data.write(kind, items, done)
         }
     }
 
