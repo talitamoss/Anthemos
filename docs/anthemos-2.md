@@ -364,6 +364,8 @@ needs nothing: music, the Clock, the weather.
 
 **2.42:** Restoring texts waits up to a minute for Android to report Anthemos as the texting app (it had looked once, too soon, and stopped), and says so if it never does.
 
+**2.43:** Whether Anthemos is the texting app is asked of Android's role itself; on GrapheneOS the older answer never came, so restoring texts waited for ever. The counts after a restore are what the phone actually took.
+
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 
 **2.32:** Finding where the phone is asks Android's fused location first (Android 12+), which many phones place themselves through while the network and GPS providers stay quiet; the weather tile had said it couldn't tell where you were.

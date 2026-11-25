@@ -63,7 +63,7 @@ class PhoneBackup(private val context: Context) {
         set(value) = prefs.edit().putLong(TEXTS_WAITING, if (value) System.currentTimeMillis() else 0).apply()
 
     /** Texts can only be written by the phone's texting app, so Anthemos is that for the moment it restores them. */
-    fun isTextingApp() = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+    fun isTextingApp() = TextingApp.held(context)
 
     /** Adds what's new on the phone to the pod's copy. What the pod holds after. */
     fun backup(): Pack.Index {

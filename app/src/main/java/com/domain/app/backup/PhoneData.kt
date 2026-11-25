@@ -35,17 +35,19 @@ class PhoneData(private val context: Context) {
         else -> rows(CallLog.Calls.CONTENT_URI, CALL_COLUMNS)
     }
 
-    /** Adds the records this phone doesn't have. How many were added. */
+    /**
+     * Adds the records this phone doesn't have. How many the phone took: a texting
+     * provider quietly ignores writes from an app that isn't the texting app.
+     */
     fun write(kind: String, items: List<JsonObject>): Int {
         val have = read(kind).map { Pack.key(kind, it) }.toHashSet()
         val missing = items.filter { Pack.key(kind, it) !in have }.distinctBy { Pack.key(kind, it) }
         if (missing.isEmpty()) return 0
-        when (kind) {
-            Pack.CONTACTS -> addContacts(missing)
-            Pack.TEXTS -> missing.chunked(500).forEach { cr.bulkInsert(Telephony.Sms.CONTENT_URI, it.map(::values).toTypedArray()) }
-            else -> missing.chunked(500).forEach { cr.bulkInsert(CallLog.Calls.CONTENT_URI, it.map(::values).toTypedArray()) }
+        return when (kind) {
+            Pack.CONTACTS -> { addContacts(missing); missing.size }
+            Pack.TEXTS -> missing.chunked(500).sumOf { cr.bulkInsert(Telephony.Sms.CONTENT_URI, it.map(::values).toTypedArray()) }
+            else -> missing.chunked(500).sumOf { cr.bulkInsert(CallLog.Calls.CONTENT_URI, it.map(::values).toTypedArray()) }
         }
-        return missing.size
     }
 
     private fun rows(uri: Uri, columns: Array<String>): List<JsonObject> =

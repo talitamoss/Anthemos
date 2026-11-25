@@ -39,6 +39,14 @@ object TextingApp {
         }
     }
 
+    /**
+     * Whether Anthemos is the texting app now. Asked of the role itself on Android 10
+     * and later: the older default-package answer lagged or never came on GrapheneOS (2.43).
+     */
+    fun held(context: Context): Boolean =
+        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && context.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_SMS)) ||
+            Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+
     /** Back to the app that was the texting app. Android 10 and later only allow this in its settings. */
     fun handBack(context: Context): Intent {
         val before = prefs(context).getString(BEFORE, null)
@@ -56,7 +64,7 @@ object TextingApp {
     fun tidy(context: Context) {
         // Not while texts wait: the phone may not have made Anthemos the texting app yet.
         if (PhoneBackup(context).textsWaiting) return
-        if (Telephony.Sms.getDefaultSmsPackage(context) != context.packageName) parts(context, on = false)
+        if (!held(context)) parts(context, on = false)
     }
 
     private fun parts(context: Context, on: Boolean) {
