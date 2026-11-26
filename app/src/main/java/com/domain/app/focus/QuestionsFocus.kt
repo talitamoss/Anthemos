@@ -3,6 +3,7 @@ package com.domain.app.focus
 
 import com.domain.app.focus.HomeFocus.tryHome
 import com.domain.app.focus.LogFocus.keep
+import com.domain.app.ai.MembersAi
 import com.domain.app.sense.PhoneAnswers
 import com.domain.app.voice.Entry
 import com.domain.app.voice.Question
@@ -44,6 +45,14 @@ object QuestionsFocus {
                 if (prompt != null) return@command keep(parser.record(request.transcript))
                 // The house may know ("is anyone home?").
                 if (tryHome(request.transcript)) return@command
+                // The members' AI, for anyone with a pod here (docs/anthemos-2.md, "Members AI").
+                if (MembersAi.canAsk(context)) {
+                    show { it.copy(reply = "Asking…") }
+                    val answer = runCatching {
+                        withContext(Dispatchers.IO) { MembersAi.ask(context, request.transcript) { so -> show { it.copy(reply = so) } } }
+                    }
+                    return@command reply(answer.getOrElse { it.message ?: "The members' AI didn't answer. Try again." })
+                }
                 reply("I can't answer that yet. I can tell you when you last did something, how many, what you had, and what time.")
             }
         )

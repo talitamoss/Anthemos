@@ -25,6 +25,7 @@ class App : Application(), Configuration.Provider {
     
     override fun onCreate() {
         super.onCreate()
+        com.domain.app.ui.theme.Look.load(this)
         
         // Initialize encryption manager BEFORE other components
         encryptionManager = EncryptionManager(this)

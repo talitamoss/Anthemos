@@ -74,7 +74,7 @@ fun SettingsScreen(
         
         // Hey Poly and updates, moved here from Speak.
         item {
-            SettingsSection(title = "Anthemos") {
+            SettingsSection(title = com.domain.app.ui.theme.Look.current.name) {
                 HeyPolySetting()
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))
                 OwnVoiceSetting()

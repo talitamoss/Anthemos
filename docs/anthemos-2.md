@@ -27,6 +27,8 @@ Fixed kinds (Food, Water, Caffeine...) lock us in: a sentence holds several thin
 
 Not on a big model on the phone, and not on a server we run for everyone: on **each person's own server**, the same one that holds their pod. Hosting and setting that up is the service people pay for. The phone does what it can alone (speech, rules, simple questions) and sends the rest to its owner's server: Whisper for harder speech, a language model as the better reader and for harder questions. No one else's server sees the words.
 
+Beside that, since 2.47, **the members' AI** (Tal, 2026-11-26): one model on the Anthemos server, shared by everyone with a pod there, for questions the phone can't answer. It keeps nothing, so no one's words are kept or shared; see Members AI.
+
 ## Hey Poly
 
 The **Hey Poly** switch in Settings (`ui/settings/sections/HeyPolySetting.kt`) turns on listening for one phrase, all the time, until it's switched off (`voice/WakeService.kt`). On hearing it, a short tone, and Speak opens listening, over the lock screen if need be. "Anthemos" isn't a word the speech model knows, so the phrase is Hey Poly (also heard as Polly, Pauly, Paulie).
@@ -237,6 +239,16 @@ Anthemos speaking in your own voice, or later a Mate's (Tal, 2026-11-26). Settin
 - **Speaking with it (next):** Anthemos runs the voice on the phone, offline.
 - **Later:** buying the use of a Mate's voice, the Mate earning from it.
 
+## Members AI
+
+One model everyone with a pod on pod.anthemos.org may ask (Tal, 2026-11-26: pooled, members only, nothing remembered or shared). Anthemos asks it when nothing on the phone answers a question and the pod is linked (`ai/MembersAi.kt`, from Questions); the answer shows as it is written and is said once whole.
+
+- **Where:** `ai.anthemos.org/ask`, a small service on the Anthemos server (`/opt/anthemos/ai/ai.py`) in front of Ollama running Qwen3 8B (Apache 2.0), about five words a second on the server's 8 CPUs; one question at a time, a few more waiting, then "busy".
+- **Members only:** the phone sends its pod sign-in token and a proof made for this one request with a key that never leaves the phone (DPoP). The service checks both against the pod server, so it knows the asker is a member, but the token is no use to it on their pod.
+- **Keeps nothing:** no questions, answers or names are written anywhere: no access log (nginx or the service), only start-up and errors, which say neither who nor what. In memory only: how many questions each member asked in the last hour (40 each, to share fairly) and recent proof ids (so a proof can't be used twice), forgotten within the hour.
+- **What the phone sends:** the question and today's date, nothing else yet. Sending only what a question needs about you (this week's sleep, say) comes next.
+- **Trust:** for now that it keeps nothing rests on the code and on whoever runs the server. Later, confidential hardware could prove it to every member (enclaves that prove what code runs).
+
 ## Coming up
 
 At the top of the page since 2.28 (`reflect/Ahead.kt`), two tiles side by side since 2.30: the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, three on the tile, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last three days will do; the page never asks. The events don't wait for it. When either tile is empty it says why (location not allowed, no calendar linked, the link didn't load, nothing on), so a missing one can be put right. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
@@ -380,6 +392,8 @@ needs nothing: music, the Clock, the weather.
 **2.45:** Your voice: recording sentences into your pod, the first step to Anthemos speaking in your voice (above, Your voice).
 
 **2.46:** Called Anthemos (not Anthemos 2), with Tal's logo as its icon, white on black. The pod dialog just offers Link with Kronk. Phone backup's actions are one tidy column.
+
+**2.47:** The members' AI answers questions Anthemos can't, for anyone with a pod on pod.anthemos.org (above, Members AI). Anthemos reads its name and colours from `assets/look.json`, the start of each person's own Anthemos.
 
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 

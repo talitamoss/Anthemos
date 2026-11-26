@@ -171,7 +171,7 @@ fun VoiceScreen(
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Anthemos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(com.domain.app.ui.theme.Look.current.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             // Hey Poly and updates live in Settings; a dot here when an update is ready.
             IconButton(onClick = onNavigateToSettings) {
                 Box {

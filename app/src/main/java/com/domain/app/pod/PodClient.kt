@@ -44,6 +44,15 @@ class PodClient(
         token()
     }
 
+    /**
+     * Headers proving this pod's member to another service (the members AI):
+     * the token and a proof for that one request, made with a key that stays here.
+     */
+    fun proveTo(method: String, url: String): Map<String, String> {
+        val t = token()
+        return mapOf("Authorization" to "DPoP $t", "DPoP" to dpop.proof(method, url, t))
+    }
+
     fun put(path: String, bytes: ByteArray) {
         val body = bytes.toRequestBody(BYTES)
         send("PUT", pod + path) { it.put(body) }.close()

@@ -9,6 +9,7 @@ import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import com.domain.app.ui.theme.Look
 import com.domain.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,13 +40,14 @@ sealed class UpdateState {
 }
 
 /**
- * Updates Anthemos 2 from the builds CI publishes to anthemos.org: reads
+ * Updates Anthemos from the builds CI publishes to anthemos.org: reads
  * anthemos2-latest.json, and if its build is newer, downloads the APK,
  * checks its hash and hands it to Android's package installer.
  */
 object Updater {
-    private const val BASE = "https://anthemos.org/builds/"
-    private const val MANIFEST = BASE + "anthemos2-latest.json"
+    /** A person's own copy follows its own builds, remade with their look (Look.channel). */
+    private val BASE = "https://anthemos.org/builds/" + (Look.current.channel?.let { "u/$it/" } ?: "")
+    private val MANIFEST = BASE + (if (Look.current.channel != null) "latest.json" else "anthemos2-latest.json")
     private const val ACTION_STATUS = "com.anthemos.UPDATE_STATUS"
 
     private val client = OkHttpClient()
