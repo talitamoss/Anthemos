@@ -16,6 +16,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.domain.app.BuildConfig
 import com.domain.app.ui.settings.sections.HeyPolySetting
+import com.domain.app.ui.settings.sections.AssistantSetting
 import com.domain.app.ui.settings.sections.OwnVoiceSetting
 import com.domain.app.ui.settings.sections.ConnectionsSettings
 import com.domain.app.update.UpdateCard
@@ -76,6 +77,8 @@ fun SettingsScreen(
         item {
             SettingsSection(title = com.domain.app.ui.theme.Look.current.name) {
                 HeyPolySetting()
+                Divider(modifier = Modifier.padding(horizontal = 16.dp))
+                AssistantSetting()
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))
                 OwnVoiceSetting()
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))

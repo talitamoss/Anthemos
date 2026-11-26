@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Anthemos as the digital assistant (voice/Assistant.kt). -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.domain.app.voice.AssistantSessionService"
+    android:recognitionService="com.domain.app.voice.AssistantRecognition"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true" />

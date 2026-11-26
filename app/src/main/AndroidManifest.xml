@@ -86,7 +86,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- Opened to listen: a headset or Bluetooth button (long press),
-                 or the assist gesture when chosen. Speak starts listening. -->
+                 the assistant (holding power), or the Listen tile. Speak starts listening. -->
             <intent-filter>
                 <action android:name="android.intent.action.VOICE_COMMAND" />
                 <action android:name="android.intent.action.ASSIST" />
@@ -109,6 +109,39 @@
             </intent-filter>
         </activity>
 
+        <!-- The digital assistant (voice/Assistant.kt): holding the power button
+             opens Speak listening, once Anthemos is chosen under Default apps. -->
+        <service
+            android:name=".voice.AssistantService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/assistant" />
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".voice.AssistantSessionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <service
+            android:name=".voice.AssistantRecognition"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+        </service>
+        <!-- The Listen tile in Quick Settings (voice/ListenTile.kt). -->
+        <service
+            android:name=".voice.ListenTile"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_listen"
+            android:label="Listen"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <service
             android:name=".place.LocationService"
             android:exported="false"

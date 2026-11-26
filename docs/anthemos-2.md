@@ -300,7 +300,10 @@ Sharing a reflection to Kronk comes later, and will be more open than a fixed ca
 - **Understanding** is the rule-based fast path in `voice/RuleParser.kt`. It covers food ("I just had lunch, chicken and a salad"), water, coffee and tea, alcohol, movement ("went for a walk for 40 minutes"), notes ("note that ..."), calls ("call Sam") and "undo". Anything else is kept as a Journal entry with your words. Tests are in `RuleParserTest`.
 - **Records** are saved to the existing encrypted store with `source = "voice"` and the transcript in `metadata`, using the same value keys as manual entries. Today's entries show under the button, with **Undo last**.
 - **Calls** look up the contact, ask "Call Sam?" out loud, then listen for yes or no (buttons too), and only then dial.
-- **Opened to listen:** a headset or Bluetooth long press (`VOICE_COMMAND`), the assist gesture if Anthemos is chosen for it, or the `com.anthemos.LISTEN` intent all open Speak listening.
+- **Opened to listen:** a headset or Bluetooth long press (`VOICE_COMMAND`), holding the power button, the Listen tile, or the `com.anthemos.LISTEN` intent all open Speak listening, over the lock screen if need be.
+  - **Holding power** (since 2.49; Tal, 2026-11-26: a shortcut like double-pressing power for the camera). Android lets no app take the double press, which is the camera's, so it's the hold: Anthemos is a digital assistant (`voice/Assistant.kt`, a `VoiceInteractionService`), and once chosen under Default apps, Digital assistant app, holding power (or the assist gesture) opens it. Each session opens Speak and goes, showing nothing of its own. Android only lists an assistant that names a recogniser, so `AssistantRecognition` is one that declines everything; Speak hears through Vosk. Settings has "Hold power to listen", which says whether it's chosen and opens the phone's page for it; Android doesn't let an app choose itself. On some phones the power button also needs setting to the assistant rather than the power menu.
+  - **The Listen tile** (since 2.49, `voice/ListenTile.kt`): added to Quick Settings by hand, one tap from the shade or the lock screen.
+  - Not the volume buttons: only an accessibility service can catch them, which sees everything on screen, and not with the screen off.
 - **Updates itself** (`update/Updater.kt`): on opening, Speak checks `anthemos.org/builds/anthemos2-latest.json` quietly and puts a dot on its Settings button when a newer build is out. Settings shows the version, "Check for updates", and "Update ready" with one button (`update/UpdateCard.kt`). It downloads the APK, checks its SHA-256 and installs it through Android's package installer. The first time, Android asks to allow "Install unknown apps" for Anthemos 2. CI signs every build with one fixed key (secrets `ANTHEMOS_KEYSTORE_B64` and `ANTHEMOS_KEYSTORE_PASSWORD`) and numbers it 100 + the run number. Before this, each build had a throwaway key, so a new build wouldn't install over the old one.
 - **Installed beside 1.x** as `com.anthemos.app.two` ("Anthemos 2"), so 1.x data is untouched. CI publishes each build as `anthemos.org/builds/anthemos2-latest.apk`.
 
@@ -405,6 +408,8 @@ needs nothing: music, the Clock, the weather.
 
 **2.48:** Home is the mic in the middle with Record and Sketch below it; swipe for the dashboard (above, One page, and Record and Sketch).
 
+**2.49:** Hold the power button to listen, once Anthemos is chosen as the digital assistant; and a Listen tile for Quick Settings (above, Opened to listen).
+
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 
 **2.32:** Finding where the phone is asks Android's fused location first (Android 12+), which many phones place themselves through while the network and GPS providers stay quiet; the weather tile had said it couldn't tell where you were.
@@ -435,7 +440,7 @@ needs nothing: music, the Clock, the weather.
 - **Location** (alpha 12): stays at places named by voice, from the trail when it's on (above, Places).
 - **Steps:** the phone's step counter sensor, no Google Fit.
 
-**Not yet:** signatures on entries, the on-device language model, spoken questions, the full default-assistant role (`VoiceInteractionService`), a wake word.
+**Not yet:** signatures on entries, the on-device language model, spoken questions, a wake word.
 
 ## Outside things we need
 

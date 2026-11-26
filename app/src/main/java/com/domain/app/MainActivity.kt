@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
 
     private fun noteListen(intent: Intent?) {
         if (intent?.action !in LISTEN_ACTIONS) return
-        // Heard Hey Poly: open over the lock screen, and wake the screen.
+        // Heard Hey Poly, held power, or the Listen tile: open over the lock screen, and wake the screen.
         if (intent?.getBooleanExtra(WakeService.EXTRA_WAKE, false) == true && android.os.Build.VERSION.SDK_INT >= 27) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
