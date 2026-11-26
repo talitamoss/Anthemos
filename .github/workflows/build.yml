@@ -1,0 +1,90 @@
+name: Build & Deploy APK
+
+on:
+  push:
+    branches: [smart-anthemos, anthemos-2]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Signing key
+        if: github.ref_name == 'anthemos-2'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANTHEMOS_KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/anthemos.jks"
+          echo "ANTHEMOS_KEYSTORE=$RUNNER_TEMP/anthemos.jks" >> $GITHUB_ENV
+          echo "ANTHEMOS_BUILD=$((100 + GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
+
+      - name: Build Debug APK
+        env:
+          ANTHEMOS_KEYSTORE_PASSWORD: ${{ secrets.ANTHEMOS_KEYSTORE_PASSWORD }}
+        run: ./gradlew assembleDebug
+
+      - name: Rename APK with timestamp
+        id: rename
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          SHORT_SHA=${GITHUB_SHA::7}
+          # Anthemos 2.0 builds keep their own name and latest link.
+          PREFIX=anthemos
+          LATEST=anthemos-latest.apk
+          if [ "${GITHUB_REF_NAME}" = "anthemos-2" ]; then PREFIX=anthemos2; LATEST=anthemos2-latest.apk; fi
+          APK_NAME="${PREFIX}-${TIMESTAMP}-${SHORT_SHA}.apk"
+          mv app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/${APK_NAME}
+          echo "apk_name=${APK_NAME}" >> $GITHUB_OUTPUT
+          echo "apk_path=app/build/outputs/apk/debug/${APK_NAME}" >> $GITHUB_OUTPUT
+          echo "latest=${LATEST}" >> $GITHUB_OUTPUT
+          # What the in-app updater reads (update/Updater.kt).
+          if [ "${GITHUB_REF_NAME}" = "anthemos-2" ]; then
+            SHA=$(sha256sum app/build/outputs/apk/debug/${APK_NAME} | cut -d' ' -f1)
+            RELEASE=$(grep '^anthemosRelease=' gradle.properties | cut -d= -f2)
+            printf '{"versionCode":%s,"versionName":"2.%s.%s","apk":"%s","sha256":"%s"}\n' \
+              "$ANTHEMOS_BUILD" "$RELEASE" "$ANTHEMOS_BUILD" "$APK_NAME" "$SHA" > app/build/outputs/apk/debug/anthemos2-latest.json
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ANTHEMOS_DEPLOY_KEY }}
+
+      - name: Add server to known hosts
+        run: ssh-keyscan -H anthemos.org >> ~/.ssh/known_hosts
+
+      - name: Deploy APK to server
+        run: |
+          scp ${{ steps.rename.outputs.apk_path }} deploy@anthemos.org:/var/www/anthemos/builds/
+          ssh deploy@anthemos.org "cd /var/www/anthemos/builds && ln -sf ${{ steps.rename.outputs.apk_name }} ${{ steps.rename.outputs.latest }}"
+          # Published after the APK, so the updater never points at a missing file.
+          if [ -f app/build/outputs/apk/debug/anthemos2-latest.json ]; then
+            scp app/build/outputs/apk/debug/anthemos2-latest.json deploy@anthemos.org:/var/www/anthemos/builds/
+          fi
+          # Keep the newest ten of this line's builds; each is ~80 MB. anthemos.org/anthemos.apk
+          # is a link to the latest link, so the site's Download button follows every build.
+          LATEST=${{ steps.rename.outputs.latest }}
+          ssh deploy@anthemos.org "cd /var/www/anthemos/builds && ls -1t ${LATEST%-latest.apk}-2*.apk | tail -n +11 | xargs -r rm -f --"

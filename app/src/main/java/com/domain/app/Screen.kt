@@ -14,7 +14,13 @@ sealed class Screen(
         title = "Collect",
         icon = AppIcons.Navigation.dashboard
     )
-    
+
+    object Direct : Screen(
+        route = "direct",
+        title = "Direct",
+        icon = AppIcons.Communication.chat
+    )
+
     object Reflect : Screen(
         route = "reflect",
         title = "Reflect",
