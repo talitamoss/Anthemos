@@ -210,6 +210,14 @@ The test phone is a Pixel 8 or newer, so on-phone AI is the default and the serv
 
 Since 2.26 Anthemos is one page (`ui/voice/VoiceScreen.kt`; Tal, 2026-11-22: clean, clear, not overstimulating). From the top: Anthemos and Settings; coming up; the reflections; today's entries; what was heard and said back, with any buttons; a box to type in; and the mic, a white ring at the bottom that turns glaucous while it listens. The look is anthemos.org's: black, white, glaucous (#6ECBB5) for what matters now, grey for what is quieter, a dashboard of square tiles two to a row (since 2.30), each a 1px line round a barely raised black, JetBrains Mono throughout (`ui/theme/`, bundled, SIL Open Font License). There is no light mode and no wallpaper colour. The old Collect and Reflect pages and the bar are gone from view.
 
+Since 2.48 the page is two, side by side (Tal, 2026-11-26: a simple listening button in the middle). The first is the mic alone in the middle, what was heard and said back under it, and Record and Sketch below. Swipe for the second: the dashboard above, then the box to type in. Two dots at the bottom say which page is showing; being opened to listen goes back to the first.
+
+## Record and Sketch
+
+Since 2.48, the two buttons under the mic. **Record** makes an audio file (AAC in .m4a) with one big button, and lists what you've recorded to play or delete. **Sketch** is a pad to scribble on with a finger, with Undo, Clear and Save; it saves a PNG on the page's colours, and a strip of past sketches opens one to look at or delete. Leaving with an unsaved sketch asks first.
+
+Both are saved on the phone straight away, in Anthemos's own files (`recordings/`, `sketches/`), and a sealed copy goes to the pod when one is linked (`anthemos/recordings/v1/`, `anthemos/sketches/v1/`); any that didn't make it go the next time the page opens (`media/Saved.kt`). Deleting removes both copies.
+
 ## Pod
 
 Everything in the encrypted store is copied to your Solid pod (`pod/`, since 2.33; Tal, 2026-11-23: sealed on the phone). Settings, Connections, Pod, Link with Kronk (below); since 2.46 that is the only way in from the app (Tal, 2026-11-26: connecting a pod from elsewhere by hand comes later). Underneath it is a client credential made on the pod's account page (`/.account/`, Client credentials, for your WebID), its id and secret. Anthemos swaps them for a short-lived token bound to a key made for the session (DPoP, `pod/Dpop.kt`, `pod/PodClient.kt`), so a copied token is no use alone.
@@ -394,6 +402,8 @@ needs nothing: music, the Clock, the weather.
 **2.46:** Called Anthemos (not Anthemos 2), with Tal's logo as its icon, white on black. The pod dialog just offers Link with Kronk. Phone backup's actions are one tidy column.
 
 **2.47:** The members' AI answers questions Anthemos can't, for anyone with a pod on pod.anthemos.org (above, Members AI). Anthemos reads its name and colours from `assets/look.json`, the start of each person's own Anthemos.
+
+**2.48:** Home is the mic in the middle with Record and Sketch below it; swipe for the dashboard (above, One page, and Record and Sketch).
 
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 
