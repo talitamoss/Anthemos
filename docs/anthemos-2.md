@@ -228,6 +228,15 @@ What a phone reset loses and no other backup keeps: your contacts, texts and cal
 - **Restore to this phone** adds only what the phone is missing; nothing on it is changed or removed. Contacts come back as contacts kept on the phone, not in an account. Android lets only the texting app write texts, so for texts Anthemos asks to be the texting app for that moment, then sends you to choose yours again (`backup/TextingApp.kt`). Becoming the texting app can restart Anthemos, so the texts are marked as waiting (for ten minutes) and put back by `TextsRestore` on whichever screen Anthemos opens to, not by the Settings dialog that asked (2.41). The parts a texting app must have are switched off except then, so Anthemos isn't offered for text links. A text arriving meanwhile is filed in the inbox; an MMS in that moment is lost.
 - **Allowed by you:** contacts, texts and call log permissions, asked when backup is turned on or a restore starts. A kind not allowed is left out. Android keeps Wi-Fi passwords, other apps' data and system settings from apps, so those can't be backed up here.
 
+## Your voice
+
+Anthemos speaking in your own voice, or later a Mate's (Tal, 2026-11-26). Settings, Anthemos, Your voice, once a pod is connected (`voice/OwnVoice.kt`, since 2.45).
+
+- **Recording:** you read 593 sentences aloud, about an hour, one at a time and at your own pace; it picks up where you left off. They are CMU ARCTIC's set A (`assets/voice/sentences.txt`), out-of-copyright sentences chosen to cover the sounds of English. Each recording is checked for silence, can be played back or redone, and is sealed into your pod under `anthemos/voice/v1/` like everything else (mono, 22,050 a second, about 160 MB for all). Recording live in the app, rather than uploading a file, is also what makes copying someone else's voice hard. Hey Poly lets go of the microphone meanwhile.
+- **Making the voice (next):** the phone hands the recordings to the Anthemos server, which starts a DigitalOcean GPU droplet, trains a Piper voice from a base trained only on freely licensed recordings (so a voice can be sold), returns the voice and deletes the recordings and the droplet. Only the voice is kept, sealed in your pod.
+- **Speaking with it (next):** Anthemos runs the voice on the phone, offline.
+- **Later:** buying the use of a Mate's voice, the Mate earning from it.
+
 ## Coming up
 
 At the top of the page since 2.28 (`reflect/Ahead.kt`), two tiles side by side since 2.30: the weather where you are (now, and today's low, high and chance of rain; from six in the evening, tomorrow's), and the rest of today's and tomorrow's events, Anthemos's own and the linked calendar's, three on the tile, an event in both told once. With nothing until then, the next one in the week. The weather shows only when location is already allowed, approximate is enough and a reading from the last three days will do; the page never asks. The events don't wait for it. When either tile is empty it says why (location not allowed, no calendar linked, the link didn't load, nothing on), so a missing one can be put right. It is fetched from Open-Meteo at most every half hour, with the position rounded to a tenth of a degree (about ten kilometres).
@@ -367,6 +376,8 @@ needs nothing: music, the Clock, the weather.
 **2.43:** Whether Anthemos is the texting app is asked of Android's role itself; on GrapheneOS the older answer never came, so restoring texts waited for ever. The counts after a restore are what the phone actually took.
 
 **2.44:** Putting texts back shows a progress bar and how many of how many.
+
+**2.45:** Your voice: recording sentences into your pod, the first step to Anthemos speaking in your voice (above, Your voice).
 
 **2.33:** Your pod: everything copied to it every hour, sealed on the phone first, with a recovery code to keep (above, Pod).
 
