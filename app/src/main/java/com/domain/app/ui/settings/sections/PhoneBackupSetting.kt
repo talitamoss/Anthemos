@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -120,6 +122,35 @@ fun PhoneBackupSetting(resumed: Int) {
     )
 
     if (!open) return
+
+    fun backUpNow() {
+        busy = true
+        message = "Backing up…"
+        scope.launch {
+            val result = runCatching { withContext(Dispatchers.IO) { backup.backup() } }
+            busy = false
+            tick++
+            message = result.fold(
+                { index -> "On your pod: " + Pack.KINDS.joinToString(", ") { "${index.total(it)} ${PhoneBackup.NAMES[it]}" } + "." },
+                { it.message ?: "That didn't finish" }
+            )
+        }
+    }
+
+    fun lookAtPod() {
+        restoring = true
+        message = "Looking at the pod…"
+        busy = true
+        scope.launch {
+            val result = runCatching { withContext(Dispatchers.IO) { backup.look() } }
+            busy = false
+            tick++
+            message = result.fold({ if (it == null) "Nothing is backed up on the pod yet." else null }, { it.message ?: "Couldn't reach the pod" })
+        }
+    }
+
+    // One column of full-width actions, then Close or Back: the dialog's own button row
+    // had three or four buttons stacked unevenly beside another.
     AlertDialog(
         onDismissRequest = { if (!busy) { open = false; restoring = false } },
         title = { Text(if (restoring) "Restore to this phone" else "Phone backup") },
@@ -138,62 +169,33 @@ fun PhoneBackupSetting(resumed: Int) {
                         Text("For texts, Android will ask to make Anthemos the texting app for a moment. You'll choose yours again after.", style = MaterialTheme.typography.bodySmall)
                     }
                     message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    Button(enabled = !busy && chosen.isNotEmpty(), onClick = { allowed { restore() } }, modifier = Modifier.fillMaxWidth()) { Text("Restore") }
                 } else {
                     Text(
                         message ?: if (status.on) "Once a day, what's new among your contacts, texts and calls is added to your pod, sealed on this phone first. Deleting something here doesn't delete it there."
                         else "Keeps your contacts, texts and call log on your pod, sealed on this phone first, and adds what's new once a day. Restore puts them back on a new or reset phone.",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    if (status.on) {
+                        Button(enabled = !busy, onClick = { backUpNow() }, modifier = Modifier.fillMaxWidth()) { Text("Back up now") }
+                    } else {
+                        Button(onClick = {
+                            allowed {
+                                backup.turn(true)
+                                tick++
+                                message = "On. The first backup starts in a moment. Anything not allowed is left out."
+                                com.domain.app.backup.BackupWorker.now(context)
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Turn on") }
+                    }
+                    OutlinedButton(enabled = !busy, onClick = { lookAtPod() }, modifier = Modifier.fillMaxWidth()) { Text("Restore to this phone") }
+                    if (status.on) OutlinedButton(enabled = !busy, onClick = { backup.turn(false); tick++; open = false }, modifier = Modifier.fillMaxWidth()) { Text("Turn off") }
                 }
             }
         },
         confirmButton = {
-            when {
-                restoring -> TextButton(enabled = !busy && chosen.isNotEmpty(), onClick = {
-                    allowed { restore() }
-                }) { Text("Restore") }
-                status.on -> TextButton(enabled = !busy, onClick = {
-                    busy = true
-                    message = "Backing up…"
-                    scope.launch {
-                        val result = runCatching { withContext(Dispatchers.IO) { backup.backup() } }
-                        busy = false
-                        tick++
-                        message = result.fold(
-                            { index -> "On your pod: " + Pack.KINDS.joinToString(", ") { "${index.total(it)} ${PhoneBackup.NAMES[it]}" } + "." },
-                            { it.message ?: "That didn't finish" }
-                        )
-                    }
-                }) { Text("Back up now") }
-                else -> TextButton(onClick = {
-                    allowed {
-                        backup.turn(true)
-                        tick++
-                        message = "On. The first backup starts in a moment. Anything not allowed is left out."
-                        com.domain.app.backup.BackupWorker.now(context)
-                    }
-                }) { Text("Turn on") }
-            }
-        },
-        dismissButton = {
-            Column {
-                if (!restoring) {
-                    TextButton(enabled = !busy, onClick = {
-                        restoring = true
-                        message = "Looking at the pod…"
-                        busy = true
-                        scope.launch {
-                            val result = runCatching { withContext(Dispatchers.IO) { backup.look() } }
-                            busy = false
-                            tick++
-                            message = result.fold({ if (it == null) "Nothing is backed up on the pod yet." else null }, { it.message ?: "Couldn't reach the pod" })
-                        }
-                    }) { Text("Restore to this phone") }
-                    if (status.on) TextButton(enabled = !busy, onClick = { backup.turn(false); tick++; open = false }) { Text("Turn off") }
-                }
-                TextButton(enabled = !busy, onClick = { if (restoring) { restoring = false; message = null } else open = false }) {
-                    Text(if (restoring) "Back" else "Close")
-                }
+            TextButton(enabled = !busy, onClick = { if (restoring) { restoring = false; message = null } else open = false }) {
+                Text(if (restoring) "Back" else "Close")
             }
         }
     )

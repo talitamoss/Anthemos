@@ -4,7 +4,6 @@ package com.domain.app.ui.settings.sections
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.browser.customtabs.CustomTabsIntent
@@ -74,10 +73,6 @@ fun PodSetting() {
     code?.let { RecoveryCodeDialog(it) { code = null; tick++ } }
 
     if (!open) return
-    var pod by remember { mutableStateOf(status.pod ?: "https://pod.anthemos.org/tal/") }
-    var id by remember { mutableStateOf("") }
-    var secret by remember { mutableStateOf("") }
-    var recovery by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
@@ -89,21 +84,7 @@ fun PodSetting() {
                 if (status.connected) {
                     Text(message ?: "Copying to ${status.pod}. Each item is sealed on this phone before it goes, so the pod holds only scrambled files.", style = MaterialTheme.typography.bodySmall)
                 } else {
-                    Text("New here? Make a pod by signing in with Kronk. Only your Kronk username is shared.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = {
-                        open = false
-                        // Over Anthemos rather than off to the browser; Kronk's own page confirms who you are.
-                        CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(context, Uri.parse(PodSync.SIGNUP + "start"))
-                    }, modifier = Modifier.fillMaxWidth()) { Text("Create with Kronk") }
-                    Text("Or connect a pod you have:", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(pod, { pod = it }, singleLine = true, label = { Text("Pod address") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(id, { id = it }, singleLine = true, label = { Text("Token id") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(secret, { secret = it }, singleLine = true, label = { Text("Token secret") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(recovery, { recovery = it }, singleLine = true, label = { Text("Recovery code, if the pod has data") }, modifier = Modifier.fillMaxWidth())
-                    Text(
-                        message ?: "On your pod's account page (pod.anthemos.org/.account/), under Client credentials, create a token for your WebID, then copy its id and secret here.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text("Sign in with Kronk to make your pod, or to find the one you have. Only your Kronk username is shared.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -120,20 +101,11 @@ fun PodSetting() {
                     }
                 }) { Text("Sync now") }
             } else {
-                TextButton(enabled = !busy && pod.isNotBlank() && id.isNotBlank() && secret.isNotBlank(), onClick = {
-                    busy = true
-                    message = "Checking…"
-                    scope.launch {
-                        val result = runCatching { withContext(Dispatchers.IO) { sync.connect(dao, pod, id, secret, recovery) } }
-                        busy = false
-                        result.onSuccess {
-                            PodWorker.schedule(context)
-                            PodWorker.now(context)
-                            open = false
-                            code = it
-                        }.onFailure { message = it.message ?: "That didn't connect" }
-                    }
-                }) { Text("Connect") }
+                TextButton(onClick = {
+                    open = false
+                    // Over Anthemos rather than off to the browser; Kronk's own page confirms who you are.
+                    CustomTabsIntent.Builder().setShowTitle(true).build().launchUrl(context, Uri.parse(PodSync.SIGNUP + "start"))
+                }) { Text("Link with Kronk") }
             }
         },
         dismissButton = {
